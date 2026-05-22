@@ -9,6 +9,26 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
+def _add_copy_menu(text_widget):
+    menu = tk.Menu(text_widget, tearoff=0)
+    menu.add_command(label='Копировать', command=lambda: _copy_selection(text_widget))
+
+    def _copy_selection(w):
+        try:
+            text = w.selection_get()
+        except tk.TclError:
+            text = w.get('1.0', 'end-1c')
+        w.clipboard_clear()
+        w.clipboard_append(text)
+
+    def show_menu(event):
+        menu.tk_popup(event.x_root, event.y_root)
+
+    text_widget.bind('<Button-3>', show_menu)
+    text_widget.bind('<Control-c>', lambda e: _copy_selection(text_widget))
+    text_widget.bind('<Control-C>', lambda e: _copy_selection(text_widget))
+
+
 class StockAppVisual:
     def __init__(self, parent, on_select, on_plot_button, on_export_button,
                  step, get_moex_tickers, on_backtest):
@@ -44,6 +64,7 @@ class StockAppVisual:
 
         self.result_text = tk.Text(parent, height=12, width=55)
         self.result_text.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+        _add_copy_menu(self.result_text)
 
         self.get_data_button = ttk.Button(
             parent, text="1. Получить данные", command=on_select)
@@ -93,6 +114,7 @@ class StockAppVisual:
 
         self.backtest_text = tk.Text(parent, height=14, width=55)
         self.backtest_text.grid(row=12, column=0, columnspan=2, padx=5, pady=5)
+        _add_copy_menu(self.backtest_text)
 
         graph_frame = ttk.Frame(parent)
         graph_frame.grid(row=0, column=2, rowspan=10, padx=10, pady=10, sticky='n')
@@ -134,14 +156,17 @@ class StockAppVisual:
 
 
 class ScannerUI:
-    STRATEGY_DISPLAY = {'bounce': 'Отбой от уровней'}
-    STRATEGY_ID_MAP = {v: k for k, v in STRATEGY_DISPLAY.items()}
-
     def __init__(self, parent, sectors, on_scan, on_legend=None, on_excel=None):
         self.parent = parent
         self.root = parent.winfo_toplevel()
         self._on_legend = on_legend
         self._on_excel = on_excel
+        self._strategy_id_map = {}
+        self._strategy_names = []
+
+        from strategy.config import get_strategy_names
+        self._strategy_names = get_strategy_names()
+        self._strategy_id_map = {name: sid for sid, name in self._strategy_names}
 
         row = 0
         ttk.Label(parent, text="Сектора для сканирования:",
@@ -168,8 +193,9 @@ class ScannerUI:
         row += 1
 
         self._strategy_combo = ttk.Combobox(parent, state='readonly', width=35)
-        self._strategy_combo['values'] = list(self.STRATEGY_DISPLAY.values())
-        if self.STRATEGY_DISPLAY:
+        display_names = [name for sid, name in self._strategy_names]
+        self._strategy_combo['values'] = display_names
+        if display_names:
             self._strategy_combo.current(0)
         self._strategy_combo.grid(row=row, column=0, columnspan=2, sticky='w', padx=5, pady=1)
         self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
@@ -246,6 +272,7 @@ class ScannerUI:
 
         self.scanner_result_text = tk.Text(left_inner, height=22, width=75, wrap=tk.WORD)
         self.scanner_result_text.grid(row=0, column=0, sticky='nsew')
+        _add_copy_menu(self.scanner_result_text)
 
         self._legend_frame = ttk.Frame(bottom_frame)
         self._legend_frame.grid(row=0, column=1, sticky='nsew')
@@ -259,6 +286,7 @@ class ScannerUI:
         self._legend_text_widget.grid(row=1, column=0, sticky='nsew')
         self._legend_text_widget.insert(tk.END, self._get_legend_text())
         self._legend_text_widget.config(state=tk.DISABLED)
+        _add_copy_menu(self._legend_text_widget)
 
     def _get_legend_text(self):
         try:
@@ -269,7 +297,7 @@ class ScannerUI:
 
     def _get_strategy_id(self):
         display = self._strategy_combo.get()
-        return self.STRATEGY_ID_MAP.get(display, 'bounce')
+        return self._strategy_id_map.get(display, 'bounce')
 
     def _rebuild_params(self):
         for w in self._params_frame.winfo_children():

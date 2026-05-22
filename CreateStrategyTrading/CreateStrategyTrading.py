@@ -22,7 +22,7 @@ from screening.sectors import SectorDB
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
 from strategy.levels import find_horizontal_levels, round_to_tolerance
-from visual import StockAppVisual, ScannerUI
+from visual import StockAppVisual, ScannerUI, _add_copy_menu
 
 # Настройка логирования
 logging.basicConfig(
@@ -370,7 +370,8 @@ class CreateStrategyApp:
         try:
             engine = BacktestEngine(
                 capital=INITIAL_CAPITAL, risk_per_trade=risk_pct / 100,
-                atr_sl=atr_sl, atr_tp=atr_tp, min_hits=min_hits)
+                atr_sl=atr_sl, atr_tp=atr_tp, min_hits=min_hits,
+                strategy='bounce')
 
             trades, metrics = engine.run(self.state.stock_data)
             selected_stock = self.app.stock_combobox.get()
@@ -496,6 +497,7 @@ class CreateStrategyApp:
         text_w.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
         text_w.insert(tk.END, get_legend_text())
         text_w.config(state=tk.DISABLED)
+        _add_copy_menu(text_w)
 
 
 if __name__ == "__main__":

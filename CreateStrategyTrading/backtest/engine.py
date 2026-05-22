@@ -8,7 +8,7 @@ from collections import Counter
 import pandas as pd
 
 from strategy.levels import find_horizontal_levels, round_to_tolerance
-from strategy.bounce import check_bounce
+from strategy.config import get_strategy_func
 from strategy.indicators import calc_atr
 from .metrics import calc_metrics
 
@@ -25,11 +25,14 @@ def candles_to_df(candles_list):
     )
 
 
+STRATEGY_SKIP_PARAMS = {'last_candles'}
+
+
 class BacktestEngine:
     def __init__(self, capital=1_000_000, risk_per_trade=0.02,
                  atr_period=14, atr_sl=1.0, atr_tp=2.0,
                  min_hits=5, max_hold=20, commission=0.0005,
-                 tolerance=None):
+                 tolerance=None, strategy='bounce', **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
         self.risk_per_trade = risk_per_trade
@@ -40,6 +43,24 @@ class BacktestEngine:
         self.max_hold = max_hold
         self.commission = commission
         self.tolerance = tolerance
+        self.strategy = strategy
+        self.strategy_kwargs = strategy_kwargs
+        self._signal_func = None
+
+    def _get_signal(self, candles, idx, levels, atr):
+        if self._signal_func is None:
+            self._signal_func = get_strategy_func(self.strategy)
+            if self._signal_func is None:
+                raise ValueError(f"Unknown strategy: {self.strategy}")
+
+        extra_kwargs = {}
+        for k, v in self.strategy_kwargs.items():
+            if k not in STRATEGY_SKIP_PARAMS:
+                extra_kwargs[k] = v
+        extra_kwargs['atr_sl'] = self.atr_sl
+        extra_kwargs['atr_tp'] = self.atr_tp
+
+        return self._signal_func(candles, idx, levels, atr, **extra_kwargs)
 
     def run(self, candles_list):
         df = candles_to_df(candles_list)
@@ -77,8 +98,7 @@ class BacktestEngine:
                 continue
 
             if position is None:
-                signal = check_bounce(
-                    candles_list, i, levels, atr, self.atr_sl, self.atr_tp)
+                signal = self._get_signal(candles_list, i, levels, atr)
                 if signal:
                     close = float(current_candle[1])
                     sl = signal['sl_price']
