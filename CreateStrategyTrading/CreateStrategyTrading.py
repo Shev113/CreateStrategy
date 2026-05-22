@@ -21,7 +21,7 @@ from screening.scanner import Scanner
 from screening.sectors import SectorDB
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
-from strategy.levels import find_horizontal_levels
+from strategy.levels import find_horizontal_levels, round_to_tolerance
 from visual import StockAppVisual, ScannerUI
 
 # Настройка логирования
@@ -167,61 +167,85 @@ class CreateStrategyApp:
             logging.error(f"Ошибка экспорта данных: {e}")
             return False
 
+    def _process_stock_data(self, stock_data, start_date, end_date):
+        """Обработка загруженных данных (вызывается в главном потоке)"""
+        if isinstance(stock_data, str):
+            self.app.result_text.delete(1.0, tk.END)
+            self.app.result_text.insert(tk.END, f"Ошибка: {stock_data}")
+            self.app.get_data_button.config(state='normal', text='1. Получить данные')
+            return
+        if not isinstance(stock_data, list) or len(stock_data) == 0:
+            self.app.result_text.delete(1.0, tk.END)
+            self.app.result_text.insert(tk.END, "Ошибка: данные не получены")
+            self.app.get_data_button.config(state='normal', text='1. Получить данные')
+            return
+
+        self.state.stock_data = stock_data
+        self.state.df = self.candles_to_df_custom(stock_data)
+        self.app.result_text.delete(1.0, tk.END)
+        min_repeats = int(self.app.min_repeats_entry.get()) if self.app.min_repeats_entry.get() else DEFAULT_MIN_REPEATS
+        if min_repeats < 1:
+            min_repeats = 1
+
+        self.state.horizontal_lines = find_horizontal_levels(
+            stock_data, min_hits=min_repeats)
+
+        if self.state.df is not None and len(stock_data) > 0:
+            avg_price = sum(float(c[3]) for c in stock_data if c and len(c) >= 4) / len(stock_data)
+            tolerance = avg_price * 0.005
+            price_counter = Counter()
+            for c in stock_data:
+                if c and len(c) >= 4:
+                    price_counter[round_to_tolerance(float(c[1]), tolerance)] += 1
+                    price_counter[round_to_tolerance(float(c[2]), tolerance)] += 1
+                    price_counter[round_to_tolerance(float(c[3]), tolerance)] += 1
+
+            for price in self.state.horizontal_lines:
+                count = price_counter.get(price, 0)
+                self.app.result_text.insert(tk.END, f"Price: {price:.2f}, Count: {count}\n")
+
+        self.state.current_step = 0
+        self.app.get_data_button.config(state='normal', text='1. Получить данные')
+
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        total_days = (end_dt - start_dt).days
+        self.app.result_text.insert(tk.END, f"\nСвечей: {len(stock_data)}, период: ~{total_days} дн.")
+
     def on_select(self) -> None:
-        """Обработка выбора акции и дат"""
-        try:
-            selected_stock = self.app.stock_combobox.get()
-            start_date = self.app.start_date_entry.get()
-            end_date = self.app.end_date_entry.get()
+        """Обработка выбора акции и дат (асинхронная загрузка)"""
+        selected_stock = self.app.stock_combobox.get()
+        start_date = self.app.start_date_entry.get()
+        end_date = self.app.end_date_entry.get()
 
-            if not self.validate_date(start_date):
-                self.app.result_text.delete(1.0, tk.END)
-                self.app.result_text.insert(tk.END, "Ошибка: неверный формат начальной даты")
-                return
-            if not self.validate_date(end_date):
-                self.app.result_text.delete(1.0, tk.END)
-                self.app.result_text.insert(tk.END, "Ошибка: неверный формат конечной даты")
-                return
-
-            self.state.stock_data = self.get_stock_data(selected_stock, start_date, end_date)
-
-            if isinstance(self.state.stock_data, str):
-                self.app.result_text.delete(1.0, tk.END)
-                self.app.result_text.insert(tk.END, f"Ошибка: {self.state.stock_data}")
-                return
-            if not isinstance(self.state.stock_data, list) or len(self.state.stock_data) == 0:
-                self.app.result_text.delete(1.0, tk.END)
-                self.app.result_text.insert(tk.END, "Ошибка: данные не получены")
-                return
-
-            all_prices = []
-            for candle in self.state.stock_data:
-                if candle is None or len(candle) < 4:
-                    continue
-                all_prices.extend([float(candle[1]), float(candle[2]), float(candle[3])])
-
-            price_counts = Counter(all_prices)
+        if not self.validate_date(start_date):
             self.app.result_text.delete(1.0, tk.END)
-            min_repeats = int(self.app.min_repeats_entry.get()) if self.app.min_repeats_entry.get() else DEFAULT_MIN_REPEATS
-            if min_repeats < 1:
-                min_repeats = 1
-
-            self.state.df = self.candles_to_df_custom(self.state.stock_data)
-            self.state.horizontal_lines = []
-
-            for price, count in sorted(price_counts.items(), key=lambda x: x[1], reverse=True):
-                if count >= min_repeats:
-                    self.app.result_text.insert(tk.END, f"Price: {price}, Count: {count}\n")
-                    self.state.horizontal_lines.append(price)
-
-            self.state.current_step = 0
-
-        except ValueError as e:
+            self.app.result_text.insert(tk.END, "Ошибка: неверный формат начальной даты")
+            return
+        if not self.validate_date(end_date):
             self.app.result_text.delete(1.0, tk.END)
-            self.app.result_text.insert(tk.END, f"Ошибка ввода: {str(e)}")
-        except Exception as e:
-            self.app.result_text.delete(1.0, tk.END)
-            self.app.result_text.insert(tk.END, f"Ошибка: {str(e)}")
+            self.app.result_text.insert(tk.END, "Ошибка: неверный формат конечной даты")
+            return
+
+        self.app.get_data_button.config(state='disabled', text='Загрузка...')
+        self.app.result_text.delete(1.0, tk.END)
+        self.app.result_text.insert(tk.END, "Загрузка данных с MOEX...")
+
+        def fetch_task():
+            try:
+                data = self.get_stock_data(selected_stock, start_date, end_date)
+                self.root.after(0, lambda: self._process_stock_data(
+                    data, start_date, end_date))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_select_error(str(e)))
+
+        t = threading.Thread(target=fetch_task, daemon=True)
+        t.start()
+
+    def _on_select_error(self, error_msg):
+        self.app.result_text.delete(1.0, tk.END)
+        self.app.result_text.insert(tk.END, f"Ошибка: {error_msg}")
+        self.app.get_data_button.config(state='normal', text='1. Получить данные')
 
     def plot_candles(self, candles: list) -> tuple:
         """Построение свечного графика"""
@@ -342,8 +366,35 @@ class CreateStrategyApp:
         toolbar.update()
         canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
+    def _run_backtest_task(self, atr_sl, atr_tp, risk_pct, min_hits):
+        try:
+            engine = BacktestEngine(
+                capital=INITIAL_CAPITAL, risk_per_trade=risk_pct / 100,
+                atr_sl=atr_sl, atr_tp=atr_tp, min_hits=min_hits)
+
+            trades, metrics = engine.run(self.state.stock_data)
+            selected_stock = self.app.stock_combobox.get()
+            csv_path, json_path = export_results(trades, metrics, selected_stock)
+
+            self.root.after(0, lambda: self._on_backtest_complete(
+                trades, metrics, csv_path, json_path, selected_stock))
+        except Exception as e:
+            self.root.after(0, lambda: self._on_backtest_error(str(e)))
+
+    def _on_backtest_complete(self, trades, metrics, csv_path, json_path, selected_stock):
+        self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+        self.app.display_backtest_results(metrics)
+        self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
+        if self.app.show_trades_var.get():
+            self.plot_with_trades(self.state.stock_data, trades)
+
+    def _on_backtest_error(self, error_msg):
+        self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")
+        self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+        logging.exception("Backtest error")
+
     def on_backtest(self) -> None:
-        """Запуск backtesting стратегии"""
+        """Запуск backtesting стратегии (асинхронно)"""
         if self.state.stock_data is None or not isinstance(self.state.stock_data, list):
             self.app.add_backtest_result("Ошибка: сначала загрузите данные (кнопка 1)")
             return
@@ -364,27 +415,17 @@ class CreateStrategyApp:
             if min_hits < 1:
                 min_hits = 1
 
-            engine = BacktestEngine(
-                capital=INITIAL_CAPITAL, risk_per_trade=risk_pct / 100,
-                atr_sl=atr_sl, atr_tp=atr_tp, min_hits=min_hits)
-
             self.app.backtest_button.config(state='disabled', text='Backtest запущен...')
-            self.app.root.update()
-            trades, metrics = engine.run(self.state.stock_data)
-            self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
-            self.app.display_backtest_results(metrics)
-            selected_stock = self.app.stock_combobox.get()
-            csv_path, json_path = export_results(trades, metrics, selected_stock)
-            self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
-            if self.app.show_trades_var.get():
-                self.plot_with_trades(self.state.stock_data, trades)
+
+            t = threading.Thread(
+                target=self._run_backtest_task,
+                args=(atr_sl, atr_tp, risk_pct, min_hits),
+                daemon=True
+            )
+            t.start()
         except ValueError:
             self.app.add_backtest_result("Ошибка: проверьте введённые числа")
             self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
-        except Exception as e:
-            self.app.add_backtest_result(f"Ошибка backtest: {str(e)}")
-            self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
-            logging.exception("Backtest error")
 
     def on_scanner(self) -> None:
         """Запуск сканера по секторам"""

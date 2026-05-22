@@ -3,10 +3,11 @@ import os
 import csv
 import json
 from datetime import datetime
+from collections import Counter
 
 import pandas as pd
 
-from strategy.levels import find_horizontal_levels
+from strategy.levels import find_horizontal_levels, round_to_tolerance
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
 from .metrics import calc_metrics
@@ -27,7 +28,8 @@ def candles_to_df(candles_list):
 class BacktestEngine:
     def __init__(self, capital=1_000_000, risk_per_trade=0.02,
                  atr_period=14, atr_sl=1.0, atr_tp=2.0,
-                 min_hits=5, max_hold=20, commission=0.0005):
+                 min_hits=5, max_hold=20, commission=0.0005,
+                 tolerance=None):
         self.capital = capital
         self.initial_capital = capital
         self.risk_per_trade = risk_per_trade
@@ -37,40 +39,46 @@ class BacktestEngine:
         self.min_hits = min_hits
         self.max_hold = max_hold
         self.commission = commission
+        self.tolerance = tolerance
 
     def run(self, candles_list):
         df = candles_to_df(candles_list)
         if df is None or len(df) < self.atr_period + 5:
             return [], calc_metrics([], self.initial_capital, self.capital)
 
+        atr_series = calc_atr(df, self.atr_period)
+
+        tolerance = self.tolerance
+        if tolerance is None:
+            avg_price = df['Low'].astype(float).mean()
+            tolerance = avg_price * 0.005
+
+        price_counter = Counter()
+
         trades = []
         position = None
 
         for i in range(self.atr_period, len(df)):
-            prev_data = candles_list[:i]
+            candle = candles_list[i - 1]
+
+            if candle is not None and len(candle) >= 4:
+                price_counter[round_to_tolerance(float(candle[1]), tolerance)] += 1
+                price_counter[round_to_tolerance(float(candle[2]), tolerance)] += 1
+                price_counter[round_to_tolerance(float(candle[3]), tolerance)] += 1
+
             current_candle = candles_list[i]
 
-            if not prev_data:
-                continue
-
-            levels = find_horizontal_levels(prev_data, self.min_hits)
+            levels = [p for p, c in price_counter.items() if c >= self.min_hits]
             if not levels:
                 continue
 
-            df_prev = candles_to_df(prev_data)
-            if df_prev is None:
+            atr = atr_series.iloc[i]
+            if pd.isna(atr):
                 continue
-
-            atr_series = calc_atr(df_prev, self.atr_period)
-            if atr_series.empty or pd.isna(atr_series.iloc[-1]):
-                continue
-            atr = atr_series.iloc[-1]
 
             if position is None:
-                entry_df = candles_to_df(
-                    candles_list[:i + 1])
                 signal = check_bounce(
-                    candles_list, i, levels, atr, self.atr_sl)
+                    candles_list, i, levels, atr, self.atr_sl, self.atr_tp)
                 if signal:
                     close = float(current_candle[1])
                     sl = signal['sl_price']

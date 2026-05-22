@@ -45,9 +45,9 @@ class StockAppVisual:
         self.result_text = tk.Text(parent, height=12, width=55)
         self.result_text.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
 
-        get_data_button = ttk.Button(
+        self.get_data_button = ttk.Button(
             parent, text="1. Получить данные", command=on_select)
-        get_data_button.grid(row=5, column=0, columnspan=2, pady=2)
+        self.get_data_button.grid(row=5, column=0, columnspan=2, pady=2)
 
         plot_button = ttk.Button(
             parent, text="2. Построить график", command=on_plot_button)

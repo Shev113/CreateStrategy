@@ -3,7 +3,7 @@ from .indicators import is_bullish_rejection, is_bearish_rejection
 from .levels import find_horizontal_levels
 
 
-def check_bounce(candles, idx, levels, atr, atr_sl=1.0):
+def check_bounce(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0):
     if idx < 1 or idx >= len(candles):
         return None
 
@@ -21,7 +21,7 @@ def check_bounce(candles, idx, levels, atr, atr_sl=1.0):
     for level in sorted_levels:
         if prev_close >= level and low <= level + threshold and close > level:
             sl_price = close - atr_sl * atr
-            tp_price = close + 2 * atr_sl * atr
+            tp_price = close + atr_tp * atr
             return {
                 'side': 'BUY', 'level': round(level, 2),
                 'sl_price': round(sl_price, 2), 'tp_price': round(tp_price, 2)
@@ -29,7 +29,7 @@ def check_bounce(candles, idx, levels, atr, atr_sl=1.0):
 
         if prev_close <= level and high >= level - threshold and close < level:
             sl_price = close + atr_sl * atr
-            tp_price = close - 2 * atr_sl * atr
+            tp_price = close - atr_tp * atr
             return {
                 'side': 'SELL', 'level': round(level, 2),
                 'sl_price': round(sl_price, 2), 'tp_price': round(tp_price, 2)
