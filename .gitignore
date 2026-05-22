@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# IDE
+.idea/
+.vs/
+
+# Logs
+*.log
+
+# Results (generated data)
+results/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Books
+Книги/
+
+# Project specific
+CreateStrategyTrading/CreateStrategyTrading.log

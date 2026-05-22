@@ -1,0 +1,12 @@
+{
+  "Банки и финансы": ["SBER", "VTBR", "T", "CBOM", "BSPB", "SVCB", "MBNK", "SBERP", "MOEX", "SFIN", "RENI", "LEAS"],
+  "Нефть и газ": ["GAZP", "LKOH", "ROSN", "TATN", "TATNP", "SNGS", "SNGSP", "NVTK", "BANE", "BANEP", "TRNFP", "RNFT", "SIBN"],
+  "Металлы и добыча": ["NLMK", "CHMF", "GMKN", "MAGN", "PLZL", "RUAL", "ALRS", "MTLR", "MTLRP", "ENPG", "VSMO", "RASP", "TRMK", "KOGK", "SELG", "UGLD", "UNKL"],
+  "IT и телеком": ["YDEX", "MTSS", "VKCO", "RTKM", "RTKMP", "HEAD", "ASTR", "POSI", "CNRU", "DATA", "DIAS", "SOFL", "IVAT"],
+  "Потребление и ритейл": ["MGNT", "X5", "FIXR", "LENT", "BELU", "MVID", "OKEY", "AQUA", "RAGR", "GCHE", "HNFG"],
+  "Электроэнергетика": ["IRAO", "HYDR", "FEES", "MSNG", "UPRO", "TGKA", "LSNG", "LSNGP", "OGKB", "MRKC", "MRKP", "MRKU", "MRKV", "MSRS", "MRKZ", "MRKY"],
+  "Химия и удобрения": ["PHOR", "AKRN", "NKNC", "NKNCP", "KZOS"],
+  "Транспорт и машиностроение": ["AFLT", "FLOT", "NMTP", "KMAZ", "SVAV", "UNAC", "UWGN"],
+  "Строительство и недвижимость": ["PIKK", "LSRG", "SMLT", "DOMRF", "ETLN", "KFBA"],
+  "Прочее": ["AFKS", "OZON", "SGZH", "MDMG", "VSEH", "WUSH", "BLNG", "RGSS", "ROLO", "ZAYM", "EUTR", "GSMS"]
+}

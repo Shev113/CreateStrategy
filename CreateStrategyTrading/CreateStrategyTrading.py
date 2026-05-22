@@ -1,0 +1,467 @@
+# CreateStrategyTrading.py
+# -*- coding: utf-8 -*-
+import json
+import logging
+import os
+import threading
+from datetime import datetime, timedelta
+from collections import Counter
+
+import matplotlib.pyplot as plt
+import mplfinance as mpf
+import pandas as pd
+import requests
+import tkinter as tk
+from tkinter import ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+
+from backtest.engine import BacktestEngine, export_results, candles_to_df
+from screening.reporter import generate_report
+from screening.scanner import Scanner
+from screening.sectors import SectorDB
+from strategy.bounce import check_bounce
+from strategy.indicators import calc_atr
+from strategy.levels import find_horizontal_levels
+from visual import StockAppVisual, ScannerUI
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('CreateStrategyTrading.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# Константы
+MAX_DATA_FETCH_INTERVAL = timedelta(days=365 * 2)
+DEFAULT_START_DATE = "2020-01-01"
+DEFAULT_END_DATE = datetime.now().strftime("%Y-%m-%d")
+MIN_CANDLES_FOR_BACKTEST = 30
+INITIAL_CAPITAL = 1_000_000
+DEFAULT_MIN_REPEATS = 5
+
+
+class StrategyAppState:
+    """Хранение состояния приложения"""
+    def __init__(self):
+        self.stock_data = None
+        self.current_step = 0
+        self.horizontal_lines = []
+        self.df = None
+
+
+class CreateStrategyApp:
+    """Основное приложение для анализа и backtesting стратегий"""
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.state = StrategyAppState()
+        self.app = None
+        self.scanner_ui = None
+        self.sector_db = SectorDB()
+        self._last_scan_results = []
+        self._last_scan_params = {}
+        self.setup_ui()
+        self.bind_events()
+
+    def candles_to_df_custom(self, candles_list: list) -> pd.DataFrame | None:
+        """Конвертация списка свечей в DataFrame"""
+        valid = [c for c in candles_list if c is not None and len(c) > 6]
+        if not valid:
+            return None
+        return pd.DataFrame(
+            valid,
+            columns=['Open', 'Close', 'High', 'Low', 'Volume', 'Value', 'Begin', 'End'],
+            index=pd.to_datetime([c[6] for c in valid], format='mixed')
+        )
+
+    def get_stock_data(self, symbol: str, start_date: str, end_date: str) -> list | str:
+        """Получение исторических данных по акции"""
+        try:
+            url = f"https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/{symbol}/candles.json"
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            all_candles = []
+            current_start = start_dt
+
+            while current_start < end_dt:
+                current_end = min(current_start + MAX_DATA_FETCH_INTERVAL, end_dt)
+                params = {
+                    "start": 0,
+                    "till": current_end.strftime("%Y-%m-%d"),
+                    "from": current_start.strftime("%Y-%m-%d"),
+                    "interval": 24
+                }
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                if "candles" in data and "data" in data["candles"]:
+                    all_candles.extend(data["candles"]["data"])
+                current_start += MAX_DATA_FETCH_INTERVAL
+            return all_candles if all_candles else "Нет данных за указанный период"
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"Ошибка HTTP: {e}")
+            return f"Ошибка HTTP: {e}"
+        except Exception as e:
+            logging.error(f"Ошибка получения данных: {e}")
+            return f"Ошибка получения данных: {e}"
+
+    def setup_ui(self) -> None:
+        """Настройка GUI"""
+        self.root.title("CreateStrategy — Технический анализ MOEX")
+        self.root.geometry("1250x800")
+
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill='both', expand=1)
+
+        tab_analysis = ttk.Frame(notebook)
+        tab_scanner = ttk.Frame(notebook)
+        notebook.add(tab_analysis, text='Анализ')
+        notebook.add(tab_scanner, text='Сканер')
+
+        self.app = StockAppVisual(
+            tab_analysis, self.on_select, self.on_plot_button, self.on_export_button,
+            self.step, self.get_moex_tickers, self.on_backtest
+        )
+
+        self.scanner_ui = ScannerUI(
+            tab_scanner, sectors=self.sector_db.get_all_sectors(),
+            on_scan=self.on_scanner, on_legend=self.on_show_legend, on_excel=self.on_export_excel
+        )
+
+    def bind_events(self) -> None:
+        """Привязка событий"""
+        pass
+
+    def get_moex_tickers(self) -> list[str]:
+        """Получение списка тикеров MOEX"""
+        try:
+            url = "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if "securities" in data and "data" in data["securities"]:
+                return [security[0] for security in data["securities"]["data"]]
+            logging.error("Отсутствует securities.data")
+            return []
+        except Exception as e:
+            logging.error(f"Ошибка получения списка акций: {e}")
+            return []
+
+    def validate_date(self, date_str: str) -> bool:
+        """Проверка формата даты"""
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+
+    def export_data_to_txt(self, data: dict, filename: str) -> bool:
+        """Экспорт данных в текстовый файл"""
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logging.error(f"Ошибка экспорта данных: {e}")
+            return False
+
+    def on_select(self) -> None:
+        """Обработка выбора акции и дат"""
+        try:
+            selected_stock = self.app.stock_combobox.get()
+            start_date = self.app.start_date_entry.get()
+            end_date = self.app.end_date_entry.get()
+
+            if not self.validate_date(start_date):
+                self.app.result_text.delete(1.0, tk.END)
+                self.app.result_text.insert(tk.END, "Ошибка: неверный формат начальной даты")
+                return
+            if not self.validate_date(end_date):
+                self.app.result_text.delete(1.0, tk.END)
+                self.app.result_text.insert(tk.END, "Ошибка: неверный формат конечной даты")
+                return
+
+            self.state.stock_data = self.get_stock_data(selected_stock, start_date, end_date)
+
+            if isinstance(self.state.stock_data, str):
+                self.app.result_text.delete(1.0, tk.END)
+                self.app.result_text.insert(tk.END, f"Ошибка: {self.state.stock_data}")
+                return
+            if not isinstance(self.state.stock_data, list) or len(self.state.stock_data) == 0:
+                self.app.result_text.delete(1.0, tk.END)
+                self.app.result_text.insert(tk.END, "Ошибка: данные не получены")
+                return
+
+            all_prices = []
+            for candle in self.state.stock_data:
+                if candle is None or len(candle) < 4:
+                    continue
+                all_prices.extend([float(candle[1]), float(candle[2]), float(candle[3])])
+
+            price_counts = Counter(all_prices)
+            self.app.result_text.delete(1.0, tk.END)
+            min_repeats = int(self.app.min_repeats_entry.get()) if self.app.min_repeats_entry.get() else DEFAULT_MIN_REPEATS
+            if min_repeats < 1:
+                min_repeats = 1
+
+            self.state.df = self.candles_to_df_custom(self.state.stock_data)
+            self.state.horizontal_lines = []
+
+            for price, count in sorted(price_counts.items(), key=lambda x: x[1], reverse=True):
+                if count >= min_repeats:
+                    self.app.result_text.insert(tk.END, f"Price: {price}, Count: {count}\n")
+                    self.state.horizontal_lines.append(price)
+
+            self.state.current_step = 0
+
+        except ValueError as e:
+            self.app.result_text.delete(1.0, tk.END)
+            self.app.result_text.insert(tk.END, f"Ошибка ввода: {str(e)}")
+        except Exception as e:
+            self.app.result_text.delete(1.0, tk.END)
+            self.app.result_text.insert(tk.END, f"Ошибка: {str(e)}")
+
+    def plot_candles(self, candles: list) -> tuple:
+        """Построение свечного графика"""
+        df = self.candles_to_df_custom(candles)
+        if df is None or df.empty:
+            return None, None
+        fig, axlist = mpf.plot(df, type='candle', style='yahoo', volume=True, returnfig=True)
+        return fig, axlist[0]
+
+    def parse_prices_from_result_text(self, text: str) -> list[float]:
+        """Извлечение цен из текстового поля результатов"""
+        prices = []
+        for line in text.strip().split("\n"):
+            try:
+                if "Price:" in line and "Count:" in line:
+                    price_str = line.split("Price:")[1].split(",")[0].strip()
+                    prices.append(float(price_str))
+            except (ValueError, IndexError):
+                continue
+        return prices
+
+    def on_plot_button(self) -> None:
+        """Построение графика с горизонтальными уровнями"""
+        if self.state.stock_data is None:
+            print("Ошибка: данные по акции не загружены")
+            return
+        selected_stock = self.app.stock_combobox.get()
+        if isinstance(self.state.stock_data, list):
+            fig, ax = self.plot_candles(self.state.stock_data)
+            if fig is None:
+                return
+
+            lines_text = self.app.result_text.get("1.0", tk.END)
+            for price in self.parse_prices_from_result_text(lines_text):
+                ax.axhline(y=price, color='r', linestyle='--', linewidth=1, alpha=0.7)
+
+            plot_window = tk.Toplevel(self.app.root)
+            plot_window.title(f"График {selected_stock}")
+            canvas = FigureCanvasTkAgg(fig, master=plot_window)
+            canvas.draw()
+            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+            toolbar = NavigationToolbar2Tk(canvas, plot_window)
+            toolbar.update()
+            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    def on_export_button(self) -> None:
+        """Экспорт данных в текстовый файл"""
+        if self.state.stock_data is None:
+            print("Ошибка: данные по акции не загружены")
+            return
+        selected_stock = self.app.stock_combobox.get()
+        if isinstance(self.state.stock_data, list):
+            filename = f"{selected_stock}_data.txt"
+            if self.export_data_to_txt(self.state.stock_data, filename):
+                print(f"Data exported to {filename}")
+            else:
+                print("Failed to export data.")
+
+    def find_nearest_horizontal_line(self, current_price: float) -> float | None:
+        """Поиск ближайшего горизонтального уровня"""
+        if not self.state.horizontal_lines:
+            return None
+        return min(self.state.horizontal_lines, key=lambda x: abs(x - current_price))
+
+    def step(self) -> None:
+        """Шаг по свечам с отображением ближайшего уровня"""
+        if not self.state.stock_data:
+            print("Ошибка: данные не загружены")
+            return
+        if self.state.current_step >= len(self.state.stock_data):
+            print("Шаги закончились")
+            return
+        current_candle = self.state.stock_data[self.state.current_step]
+        if current_candle is None or len(current_candle) < 4:
+            self.state.current_step += 1
+            return
+        current_price = float(current_candle[1])
+        nearest_line = self.find_nearest_horizontal_line(current_price)
+        if nearest_line is not None and self.state.df is not None:
+            fig, axlist = mpf.plot(self.state.df, type='candle', style='yahoo',
+                                   volume=True, returnfig=True)
+            axlist[0].axhline(y=nearest_line, color='r', linestyle='--', linewidth=2)
+            for widget in self.app.canvas.get_tk_widget().winfo_children():
+                widget.destroy()
+            self.app.canvas.figure = fig
+            self.app.canvas.draw()
+        self.state.current_step += 1
+
+    def plot_with_trades(self, stock_data: list, trades: list) -> None:
+        """Визуализация сделок на графике"""
+        df = self.candles_to_df_custom(stock_data)
+        if df is None or df.empty:
+            return
+        fig, axlist = mpf.plot(df, type='candle', style='yahoo',
+                               volume=True, returnfig=True)
+        ax = axlist[0]
+        for trade in trades:
+            entry_idx = trade['entry_idx']
+            exit_idx = trade['exit_idx']
+            ep = trade['entry_price']
+            xp = trade['exit_price']
+            ec, xc = ('lime', 'gold') if trade['pnl'] > 0 else ('red', 'orange')
+            marker_entry = '^' if trade['side'] == 'BUY' else 'v'
+            marker_exit = 'v' if trade['side'] == 'BUY' else '^'
+            ax.scatter(entry_idx, ep, marker=marker_entry, color=ec, s=180,
+                       zorder=5, edgecolors='black', linewidths=0.5)
+            ax.scatter(exit_idx, xp, marker=marker_exit, color=xc, s=180,
+                       zorder=5, edgecolors='black', linewidths=0.5)
+
+        selected_stock = self.app.stock_combobox.get()
+        plot_window = tk.Toplevel(self.app.root)
+        plot_window.title(f"Backtest - {selected_stock}")
+        plot_window.geometry("1200x700")
+        canvas = FigureCanvasTkAgg(fig, master=plot_window)
+        canvas.draw()
+        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        toolbar = NavigationToolbar2Tk(canvas, plot_window)
+        toolbar.update()
+        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    def on_backtest(self) -> None:
+        """Запуск backtesting стратегии"""
+        if self.state.stock_data is None or not isinstance(self.state.stock_data, list):
+            self.app.add_backtest_result("Ошибка: сначала загрузите данные (кнопка 1)")
+            return
+        if len(self.state.stock_data) < MIN_CANDLES_FOR_BACKTEST:
+            self.app.add_backtest_result("Ошибка: слишком мало данных (нужно >= 30 свечей)")
+            return
+        try:
+            atr_sl = float(self.app.atr_sl_entry.get())
+            atr_tp = float(self.app.atr_tp_entry.get())
+            risk_pct = float(self.app.risk_entry.get())
+            min_hits = int(self.app.min_repeats_entry.get()) if self.app.min_repeats_entry.get() else DEFAULT_MIN_REPEATS
+            if atr_sl <= 0 or atr_tp <= 0:
+                self.app.add_backtest_result("Ошибка: ATR множители должны быть > 0")
+                return
+            if risk_pct <= 0 or risk_pct > 100:
+                self.app.add_backtest_result("Ошибка: риск должен быть 0-100%")
+                return
+            if min_hits < 1:
+                min_hits = 1
+
+            engine = BacktestEngine(
+                capital=INITIAL_CAPITAL, risk_per_trade=risk_pct / 100,
+                atr_sl=atr_sl, atr_tp=atr_tp, min_hits=min_hits)
+
+            self.app.backtest_button.config(state='disabled', text='Backtest запущен...')
+            self.app.root.update()
+            trades, metrics = engine.run(self.state.stock_data)
+            self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+            self.app.display_backtest_results(metrics)
+            selected_stock = self.app.stock_combobox.get()
+            csv_path, json_path = export_results(trades, metrics, selected_stock)
+            self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
+            if self.app.show_trades_var.get():
+                self.plot_with_trades(self.state.stock_data, trades)
+        except ValueError:
+            self.app.add_backtest_result("Ошибка: проверьте введённые числа")
+            self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+        except Exception as e:
+            self.app.add_backtest_result(f"Ошибка backtest: {str(e)}")
+            self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+            logging.exception("Backtest error")
+
+    def on_scanner(self) -> None:
+        """Запуск сканера по секторам"""
+        selected = self.scanner_ui.get_selected_sectors()
+        if not selected:
+            self.scanner_ui.show_report("Ошибка: выберите хотя бы один сектор.")
+            return
+
+        params = self.scanner_ui.get_backtest_params()
+        if params is None:
+            self.scanner_ui.show_report("Ошибка: проверьте числовые параметры.")
+            return
+
+        date_from = self.scanner_ui.scanner_date_from.get()
+        date_to = self.scanner_ui.scanner_date_to.get()
+        if not self.validate_date(date_from) or not self.validate_date(date_to):
+            self.scanner_ui.show_report("Ошибка: проверьте формат дат (гггг-мм-дд).")
+            return
+
+        self._last_scan_params = params
+
+        def run_scan():
+            try:
+                scanner = Scanner(sector_db=self.sector_db, fetch_fn=self.get_stock_data)
+                results = scanner.scan(
+                    sectors=selected,
+                    date_from=date_from,
+                    date_to=date_to,
+                    backtest_params=params,
+                    progress_fn=lambda c, t, tick, sec: self.scanner_ui.update_progress(c, t, tick, sec)
+                )
+                self._last_scan_results = results
+                report = generate_report(results, top_n=5, params=params)
+                self.root.after(0, lambda: self.scanner_ui.show_report(report))
+            except Exception as e:
+                self.root.after(0, lambda: self.scanner_ui.show_report(f"Ошибка: {str(e)}"))
+            finally:
+                self.root.after(0, lambda: self.scanner_ui.set_running(False))
+
+        self.scanner_ui.set_running(True)
+        t = threading.Thread(target=run_scan, daemon=True)
+        t.start()
+
+    def on_export_excel(self) -> None:
+        """Экспорт результатов сканера в Excel"""
+        if not self._last_scan_results:
+            self.scanner_ui.show_report("Ошибка: сначала запустите сканер.")
+            return
+        from screening.reporter import export_to_excel
+        os.makedirs('results', exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        fpath = f'results/scanner_{ts}.xlsx'
+        try:
+            export_to_excel(self._last_scan_results, self._last_scan_params, fpath)
+            self.scanner_ui.scanner_result_text.insert(tk.END, f"\n\nExcel сохранён: {fpath}")
+        except ImportError:
+            self.scanner_ui.show_report("Ошибка: установите openpyxl (pip install openpyxl)")
+        except Exception as e:
+            self.scanner_ui.show_report(f"Ошибка экспорта: {str(e)}")
+
+    def on_show_legend(self) -> None:
+        """Показать окно с легендой сигналов"""
+        from screening.reporter import get_legend_text
+        legend_win = tk.Toplevel(self.root)
+        legend_win.title("Легенда сигналов")
+        legend_win.geometry("550x500")
+        text_w = tk.Text(legend_win, wrap=tk.WORD, font=('Consolas', 10))
+        text_w.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
+        text_w.insert(tk.END, get_legend_text())
+        text_w.config(state=tk.DISABLED)
+
+
+if __name__ == "__main__":
+    def main():
+        """Точка входа приложения"""
+        root = tk.Tk()
+        app = CreateStrategyApp(root)
+        root.mainloop()
+
+    main()
