@@ -35,12 +35,15 @@ class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
-                 favorites=None, on_toggle_favorite=None):
+                 on_load_all_tickers=None,
+                 favorites=None, on_toggle_favorite=None,
+                 sector_db=None):
         self.root = parent.winfo_toplevel()
         self._last_signal = None
         self._last_params = None
         self._favorites = favorites or []
         self._on_toggle_favorite = on_toggle_favorite
+        self._sector_db = sector_db
 
         # Разделяем вкладку на левую панель (управление) и правую (график)
         parent.grid_columnconfigure(0, weight=0, minsize=480)
@@ -71,7 +74,9 @@ class StockAppVisual:
         self.parent = parent
 
         all_tickers = get_moex_tickers()
-        self._all_tickers = sort_tickers_by_favorites(all_tickers, self._favorites)
+        sector_map = self._sector_db.get_ticker_to_sector_map() if self._sector_db else {}
+        self._all_tickers = sort_tickers_by_favorites(
+            self._build_display_list(all_tickers, sector_map), self._favorites)
 
         label_stock = ttk.Label(parent, text="Тикер:")
         label_stock.grid(row=0, column=0, padx=5, pady=5, sticky='e')
@@ -85,6 +90,10 @@ class StockAppVisual:
         self._star_btn = ttk.Button(ticker_frame, text='★', width=3,
                                     command=self._toggle_current_favorite)
         self._star_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self._load_all_btn = ttk.Button(
+            ticker_frame, text='Загрузить все эмитенты',
+            command=lambda: on_load_all_tickers() if on_load_all_tickers else None)
+        self._load_all_btn.pack(side=tk.LEFT, padx=(8, 0))
         self._update_star_button()
         self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: (self._restore_ticker_list(), self._load_ticker_settings(), self._update_star_button()))
 
@@ -205,11 +214,11 @@ class StockAppVisual:
         return ticker in self._favorites
 
     def _update_star_button(self):
-        ticker = self.stock_combobox.get()
+        ticker = self._extract_ticker(self.stock_combobox.get())
         self._star_btn.config(text='★' if self._is_favorite(ticker) else '☆')
 
     def _toggle_current_favorite(self):
-        ticker = self.stock_combobox.get()
+        ticker = self._extract_ticker(self.stock_combobox.get())
         if not ticker or not self._on_toggle_favorite:
             return
         self._favorites = self._on_toggle_favorite(ticker)
@@ -219,6 +228,51 @@ class StockAppVisual:
         if current in self._all_tickers:
             self.stock_combobox.set(current)
         self._update_star_button()
+
+    @staticmethod
+    def _build_display_list(tickers, sector_map):
+        result = []
+        for t in tickers:
+            sector = sector_map.get(t, '')
+            if not sector:
+                sector = 'Прочее'
+            result.append(f'[{sector}] {t}')
+
+        def sort_key(display):
+            if display.startswith('[') and '] ' in display:
+                sector = display.split('] ', 1)[0][1:]
+                if sector in ('Прочее', 'Без сектора'):
+                    return (1, display)
+                return (0, sector + display)
+            return (1, display)
+
+        result.sort(key=sort_key)
+        return result
+
+    @staticmethod
+    def _extract_ticker(display):
+        if display.startswith('[') and '] ' in display:
+            return display.split('] ', 1)[1]
+        return display
+
+    def get_selected_ticker(self):
+        return self._extract_ticker(self.stock_combobox.get())
+
+    def update_ticker_list(self, all_tickers, sector_map):
+        new_display = sort_tickers_by_favorites(
+            self._build_display_list(all_tickers, sector_map), self._favorites)
+        self._all_tickers = new_display
+        current = self.stock_combobox.get()
+        self.stock_combobox['values'] = new_display
+        if current in new_display:
+            self.stock_combobox.set(current)
+        self._load_all_btn.config(state='normal', text='Загрузить все эмитенты')
+
+    def set_loading_tickers(self, loading):
+        if loading:
+            self._load_all_btn.config(state='disabled', text='Загрузка...')
+        else:
+            self._load_all_btn.config(state='normal', text='Загрузить все эмитенты')
 
     def _prepare_df_for_chart(self, df):
         if df is None or df.empty:
@@ -467,7 +521,7 @@ class StockAppVisual:
         return 'results/ticker_settings.json'
 
     def _save_current_settings(self):
-        ticker = self.stock_combobox.get()
+        ticker = self._extract_ticker(self.stock_combobox.get())
         if not ticker:
             return
         import json
@@ -493,7 +547,7 @@ class StockAppVisual:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     def _load_ticker_settings(self):
-        ticker = self.stock_combobox.get()
+        ticker = self._extract_ticker(self.stock_combobox.get())
         if not ticker:
             return
         import json
@@ -520,7 +574,7 @@ class StockAppVisual:
 
 class ScannerUI:
     def __init__(self, parent, sectors, on_scan, on_legend=None, on_excel=None, on_diary=None,
-                 on_show_settings=None):
+                 on_show_settings=None, total_tickers=0):
         self.parent = parent
         self.root = parent.winfo_toplevel()
         self._on_legend = on_legend
@@ -529,6 +583,7 @@ class ScannerUI:
         self._on_show_settings = on_show_settings
         self._strategy_id_map = {}
         self._strategy_names = []
+        self._total_tickers = total_tickers
 
         from strategy.config import get_strategy_names
         self._strategy_names = get_strategy_names()
@@ -549,6 +604,13 @@ class ScannerUI:
             self.sector_vars[sector] = var
             cb = ttk.Checkbutton(sector_frame, text=sector, variable=var)
             cb.grid(row=i // 2, column=i % 2, sticky='w', padx=5, pady=1)
+
+        self._total_count_label = ttk.Label(
+            parent, text=f"Всего эмитентов: {total_tickers}",
+            font=('', 8), foreground='gray')
+        self._total_count_label.grid(
+            row=row, column=0, columnspan=2, sticky='w', padx=8, pady=(0, 2))
+        row += 1
 
         ttk.Separator(parent, orient='horizontal').grid(
             row=row, column=0, columnspan=2, sticky='ew', pady=3)
@@ -624,7 +686,7 @@ class ScannerUI:
         self.progress_bar.grid(row=row, column=0, columnspan=2, sticky='ew', padx=10, pady=2)
         row += 1
 
-        self.status_var = tk.StringVar(value="Готов к сканированию")
+        self.status_var = tk.StringVar(value=f"Готов к сканированию ({total_tickers} эмитентов)" if total_tickers else "Готов к сканированию")
         self.status_label = ttk.Label(parent, textvariable=self.status_var, foreground='gray')
         self.status_label.grid(row=row, column=0, columnspan=2, pady=2)
         row += 1
@@ -765,7 +827,12 @@ class ScannerUI:
             self.scan_button.config(state='normal', text='Запустить сканер')
             self.export_excel_button.config(state='normal')
             self.diary_button.config(state='normal')
-            self.status_var.set('Завершено')
+            self.status_var.set(f'Завершено ({self._total_tickers} эмитентов)')
+
+    def update_total_count(self, total):
+        self._total_tickers = total
+        self._total_count_label.config(text=f"Всего эмитентов: {total}")
+        self.status_var.set(f"Готов к сканированию ({total} эмитентов)")
 
 
 class DiaryUI:

@@ -160,15 +160,20 @@ class CreateStrategyApp:
             on_diary=self.on_add_to_diary_analysis,
             on_show_settings=self.on_show_ticker_settings,
             on_save_results=self._on_save_results,
+            on_load_all_tickers=self._on_load_all_tickers,
             favorites=self._favorites,
-            on_toggle_favorite=self._on_toggle_favorite
+            on_toggle_favorite=self._on_toggle_favorite,
+            sector_db=self.sector_db
         )
 
+        all_sectors = self.sector_db.get_all_sectors()
+        total_tickers = len(self.sector_db.get_tickers(all_sectors))
         self.scanner_ui = ScannerUI(
-            tab_scanner, sectors=self.sector_db.get_all_sectors(),
+            tab_scanner, sectors=all_sectors,
             on_scan=self.on_scanner, on_legend=self.on_show_legend,
             on_excel=self.on_export_excel, on_diary=self.on_add_to_diary,
-            on_show_settings=self.on_show_ticker_settings
+            on_show_settings=self.on_show_ticker_settings,
+            total_tickers=total_tickers
         )
 
         self.diary_ui = DiaryUI(
@@ -185,7 +190,7 @@ class CreateStrategyApp:
         import json
         os.makedirs('results', exist_ok=True)
         state = {
-            'last_ticker': self.app.stock_combobox.get(),
+            'last_ticker': self.app.get_selected_ticker(),
             'start_date': self.app.start_date_entry.get(),
             'end_date': self.app.end_date_entry.get(),
             'last_capital': self._last_capital,
@@ -241,6 +246,27 @@ class CreateStrategyApp:
             self.scanner_ui._legend_text_widget.config(bg=bg, fg=fg)
         import matplotlib.pyplot as plt
         plt.style.use('dark_background' if is_dark else 'default')
+
+    def _on_sectors_loaded(self, ticker_to_sector, sector_to_tickers):
+        if ticker_to_sector is None:
+            self.app.set_loading_tickers(False)
+            self.app.result_text.insert(tk.END, "Ошибка загрузки эмитентов (MOEX API недоступен)\n")
+            return
+        old_count = len(self.sector_db.get_all_tickers())
+        self.sector_db.apply_dynamic_data(ticker_to_sector, sector_to_tickers)
+        all_tickers = self.get_moex_tickers()
+        sector_map = self.sector_db.get_ticker_to_sector_map()
+        self.app.update_ticker_list(all_tickers, sector_map)
+        total = len(self.sector_db.get_tickers(self.sector_db.get_all_sectors()))
+        self.scanner_ui.update_total_count(total)
+        added = total - old_count
+        self.app.result_text.insert(
+            tk.END,
+            f"Загружено {total} эмитентов (+{added} из MOEX индексов)\n")
+
+    def _on_load_all_tickers(self):
+        self.app.set_loading_tickers(True)
+        self.sector_db.load_dynamic_async(on_complete=self._on_sectors_loaded)
 
     def _on_toggle_favorite(self, ticker):
         from utils import save_favorites
@@ -335,7 +361,7 @@ class CreateStrategyApp:
 
     def on_select(self) -> None:
         """Обработка выбора акции и дат (асинхронная загрузка)"""
-        selected_stock = self.app.stock_combobox.get()
+        selected_stock = self.app.get_selected_ticker()
         start_date = self.app.start_date_entry.get()
         end_date = self.app.end_date_entry.get()
 
@@ -373,7 +399,7 @@ class CreateStrategyApp:
         if self.state.stock_data is None:
             print("Ошибка: данные по акции не загружены")
             return
-        selected_stock = self.app.stock_combobox.get()
+        selected_stock = self.app.get_selected_ticker()
         if isinstance(self.state.stock_data, list):
             filename = f"{selected_stock}_data.txt"
             if self.export_data_to_txt(self.state.stock_data, filename):
@@ -385,7 +411,7 @@ class CreateStrategyApp:
         try:
             engine = BacktestEngine(**params)
             trades, metrics = engine.run(self.state.stock_data)
-            selected_stock = self.app.stock_combobox.get()
+            selected_stock = self.app.get_selected_ticker()
             self._last_trades = trades
             self._last_metrics = metrics
             self._last_export_stock = selected_stock
@@ -449,7 +475,7 @@ class CreateStrategyApp:
     def _on_save_results(self):
         if not self._last_trades and not self._last_metrics:
             return
-        stock = self._last_export_stock or self.app.stock_combobox.get()
+        stock = self._last_export_stock or self.app.get_selected_ticker()
         csv_path, json_path = _export_results(
             self._last_trades or [], self._last_metrics or {}, stock)
         self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
@@ -690,7 +716,7 @@ class CreateStrategyApp:
             mb.showinfo('В дневник', 'Нет параметров. Запустите backtest.')
             return
 
-        ticker = self.app.stock_combobox.get()
+        ticker = self.app.get_selected_ticker()
         if not ticker:
             return
 
