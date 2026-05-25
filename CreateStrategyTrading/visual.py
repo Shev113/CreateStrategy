@@ -35,7 +35,6 @@ class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
-                 on_load_all_tickers=None,
                  favorites=None, on_toggle_favorite=None,
                  sector_db=None):
         self.root = parent.winfo_toplevel()
@@ -90,10 +89,9 @@ class StockAppVisual:
         self._star_btn = ttk.Button(ticker_frame, text='★', width=3,
                                     command=self._toggle_current_favorite)
         self._star_btn.pack(side=tk.LEFT, padx=(4, 0))
-        self._load_all_btn = ttk.Button(
-            ticker_frame, text='Загрузить все эмитенты',
-            command=lambda: on_load_all_tickers() if on_load_all_tickers else None)
-        self._load_all_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self._ticker_status_var = tk.StringVar()
+        self._ticker_status_label = ttk.Label(ticker_frame, textvariable=self._ticker_status_var, foreground='gray')
+        self._ticker_status_label.pack(side=tk.LEFT, padx=(8, 0))
         self._update_star_button()
         self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: (self._restore_ticker_list(), self._load_ticker_settings(), self._update_star_button()))
 
@@ -266,13 +264,17 @@ class StockAppVisual:
         self.stock_combobox['values'] = new_display
         if current in new_display:
             self.stock_combobox.set(current)
-        self._load_all_btn.config(state='normal', text='Загрузить все эмитенты')
+        self.set_tickers_loading(False)
+        self._ticker_status_var.set(f'Загружено {len(all_tickers)} эмитентов')
 
-    def set_loading_tickers(self, loading):
+    def set_tickers_loading(self, loading):
         if loading:
-            self._load_all_btn.config(state='disabled', text='Загрузка...')
+            self.stock_combobox.config(state='disabled')
+            self._star_btn.config(state='disabled')
+            self._ticker_status_var.set('Загрузка списка эмитентов...')
         else:
-            self._load_all_btn.config(state='normal', text='Загрузить все эмитенты')
+            self.stock_combobox.config(state='normal')
+            self._star_btn.config(state='normal')
 
     def _prepare_df_for_chart(self, df):
         if df is None or df.empty:
@@ -296,11 +298,16 @@ class StockAppVisual:
         if chart_df is None or chart_df.empty:
             return
 
-        if self._chart_figure is not None:
-            return
-
         for w in self._chart_frame.winfo_children():
             w.destroy()
+        if self._chart_figure is not None:
+            import matplotlib.pyplot as plt
+            plt.close(self._chart_figure)
+        self._chart_lines.clear()
+        self._chart_figure = None
+        self._chart_canvas = None
+        self._chart_toolbar = None
+        self._chart_ax = None
 
         n_points = len(chart_df)
         fig, axes = mpf.plot(

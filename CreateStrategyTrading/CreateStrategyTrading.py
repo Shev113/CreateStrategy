@@ -78,6 +78,7 @@ class CreateStrategyApp:
         migrate_ticker_settings(os.path.join('results', 'ticker_settings.json'))
         self.setup_ui()
         self._load_session_state()
+        self._start_auto_load_tickers()
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
         self.bind_events()
 
@@ -160,7 +161,6 @@ class CreateStrategyApp:
             on_diary=self.on_add_to_diary_analysis,
             on_show_settings=self.on_show_ticker_settings,
             on_save_results=self._on_save_results,
-            on_load_all_tickers=self._on_load_all_tickers,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db
@@ -249,7 +249,7 @@ class CreateStrategyApp:
 
     def _on_sectors_loaded(self, ticker_to_sector, sector_to_tickers):
         if ticker_to_sector is None:
-            self.app.set_loading_tickers(False)
+            self.app.set_tickers_loading(False)
             self.app.result_text.insert(tk.END, "Ошибка загрузки эмитентов (MOEX API недоступен)\n")
             return
         old_count = len(self.sector_db.get_all_tickers())
@@ -264,8 +264,8 @@ class CreateStrategyApp:
             tk.END,
             f"Загружено {total} эмитентов (+{added} из MOEX индексов)\n")
 
-    def _on_load_all_tickers(self):
-        self.app.set_loading_tickers(True)
+    def _start_auto_load_tickers(self):
+        self.app.set_tickers_loading(True)
         self.sector_db.load_dynamic_async(on_complete=self._on_sectors_loaded)
 
     def _on_toggle_favorite(self, ticker):
