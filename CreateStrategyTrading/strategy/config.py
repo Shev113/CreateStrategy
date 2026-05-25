@@ -19,8 +19,6 @@ STRATEGY_REGISTRY = {
              'hint': 'Через сколько свечей закрыть сделку, если не сработали SL/TP'},
             {'key': 'commission', 'label': 'Комиссия %', 'default': 0.05, 'type': float,
              'hint': 'Комиссия брокера за сделку'},
-            {'key': 'last_candles', 'label': 'Свежесть касаний (свечи)', 'default': 10, 'type': int,
-             'hint': 'Сколько последних свечей учитывать для свежести уровня'},
         ]
     },
     'breakout': {

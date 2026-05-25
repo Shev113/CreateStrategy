@@ -25,9 +25,6 @@ def candles_to_df(candles_list):
     )
 
 
-STRATEGY_SKIP_PARAMS = {'last_candles'}
-
-
 class BacktestEngine:
     def __init__(self, capital=1_000_000, risk_per_trade=0.02,
                  atr_period=14, atr_sl=1.0, atr_tp=2.0,
@@ -53,10 +50,7 @@ class BacktestEngine:
             if self._signal_func is None:
                 raise ValueError(f"Unknown strategy: {self.strategy}")
 
-        extra_kwargs = {}
-        for k, v in self.strategy_kwargs.items():
-            if k not in STRATEGY_SKIP_PARAMS:
-                extra_kwargs[k] = v
+        extra_kwargs = dict(self.strategy_kwargs)
         extra_kwargs['atr_sl'] = self.atr_sl
         extra_kwargs['atr_tp'] = self.atr_tp
 

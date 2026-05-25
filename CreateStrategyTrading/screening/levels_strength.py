@@ -2,7 +2,10 @@
 from collections import defaultdict
 
 
-def calculate_level_strength(trades, last_candles=10):
+DEFAULT_LAST_CANDLES = 10
+
+
+def calculate_level_strength(trades, last_candles=DEFAULT_LAST_CANDLES):
     """
     Group trades by (level, side) and calculate strength 1-5.
 

@@ -5,7 +5,8 @@ import time
 from datetime import datetime
 
 from .sectors import SectorDB
-from .levels_strength import calculate_level_strength, get_best_level_signal, WAIT_ACTION
+from .levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal, WAIT_ACTION
+from utils import normalize_numeric_params
 
 from strategy.indicators import calc_atr
 from backtest.engine import BacktestEngine, candles_to_df
@@ -69,7 +70,8 @@ class Scanner:
                             if 'strategy' in saved:
                                 params['strategy'] = saved['strategy']
                             if 'params' in saved:
-                                for k, v in saved['params'].items():
+                                normalized = normalize_numeric_params(saved['params'])
+                                for k, v in normalized.items():
                                     params[k] = v
                             if 'risk_per_trade' in params:
                                 params['risk_per_trade'] = params['risk_per_trade'] / 100.0
@@ -116,7 +118,7 @@ class Scanner:
                         if not atr_series.empty and not atr_series.isna().iloc[-1]:
                             atr_value = atr_series.iloc[-1]
 
-                    last_candles = backtest_params.get('last_candles', 10)
+                    last_candles = DEFAULT_LAST_CANDLES
                     levels_strength = calculate_level_strength(trades, last_candles=last_candles)
                     if levels_strength and atr_value and last_price:
                         atr_sl = backtest_params.get('atr_sl', 1.0)

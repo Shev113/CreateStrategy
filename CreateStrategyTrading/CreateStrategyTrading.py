@@ -12,9 +12,14 @@ import requests
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox as mb
+try:
+    import sv_ttk
+    HAS_SV_TTK = True
+except ImportError:
+    HAS_SV_TTK = False
 
 from backtest.engine import BacktestEngine, export_results, candles_to_df
-from screening.levels_strength import calculate_level_strength, get_best_level_signal
+from screening.levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal
 from screening.reporter import generate_report
 from screening.scanner import Scanner
 from screening.sectors import SectorDB
@@ -23,6 +28,7 @@ from strategy.indicators import calc_atr
 from strategy.levels import find_horizontal_levels, round_to_tolerance
 from visual import StockAppVisual, ScannerUI, DiaryUI, _add_copy_menu
 from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_position_volume
+from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites
 
 # Настройка логирования
 logging.basicConfig(
@@ -41,6 +47,7 @@ DEFAULT_END_DATE = datetime.now().strftime("%Y-%m-%d")
 MIN_CANDLES_FOR_BACKTEST = 30
 INITIAL_CAPITAL = 1_000_000
 DEFAULT_MIN_REPEATS = 5
+SESSION_STATE_PATH = os.path.join('results', 'session_state.json')
 
 
 class StrategyAppState:
@@ -63,8 +70,13 @@ class CreateStrategyApp:
         self.sector_db = SectorDB()
         self._last_scan_results = []
         self._last_scan_params = {}
+        self._last_capital = 1_000_000
+        self._favorites = load_favorites()
         self.diary_storage = DiaryStorage()
+        migrate_ticker_settings(os.path.join('results', 'ticker_settings.json'))
         self.setup_ui()
+        self._load_session_state()
+        self.root.protocol('WM_DELETE_WINDOW', self._on_close)
         self.bind_events()
 
     def candles_to_df_custom(self, candles_list: list) -> pd.DataFrame | None:
@@ -109,10 +121,26 @@ class CreateStrategyApp:
             logging.error(f"Ошибка получения данных: {e}")
             return f"Ошибка получения данных: {e}"
 
+    DARK_TEXT_BG = '#1e1e1e'
+    DARK_TEXT_FG = '#d4d4d4'
+    LIGHT_TEXT_BG = '#ffffff'
+    LIGHT_TEXT_FG = '#000000'
+
     def setup_ui(self) -> None:
         """Настройка GUI"""
         self.root.title("CreateStrategy — Технический анализ MOEX")
         self.root.geometry("1250x800")
+
+        self._current_theme = 'light'
+        if HAS_SV_TTK:
+            sv_ttk.set_theme(self._current_theme)
+
+        top_bar = ttk.Frame(self.root)
+        top_bar.pack(fill=tk.X, padx=5, pady=(5, 0))
+        ttk.Label(top_bar, text="CreateStrategy", font=('', 12, 'bold')).pack(side=tk.LEFT)
+        if HAS_SV_TTK:
+            self._theme_btn = ttk.Button(top_bar, text='🌙 Тёмная', width=12, command=self._toggle_theme)
+            self._theme_btn.pack(side=tk.RIGHT)
 
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=1)
@@ -128,7 +156,9 @@ class CreateStrategyApp:
             tab_analysis, self.on_select, self.on_export_button,
             self.get_moex_tickers, self.on_backtest,
             on_diary=self.on_add_to_diary_analysis,
-            on_show_settings=self.on_show_ticker_settings
+            on_show_settings=self.on_show_ticker_settings,
+            favorites=self._favorites,
+            on_toggle_favorite=self._on_toggle_favorite
         )
 
         self.scanner_ui = ScannerUI(
@@ -147,6 +177,80 @@ class CreateStrategyApp:
     def bind_events(self) -> None:
         """Привязка событий"""
         pass
+
+    def _save_session_state(self) -> None:
+        import json
+        os.makedirs('results', exist_ok=True)
+        state = {
+            'last_ticker': self.app.stock_combobox.get(),
+            'start_date': self.app.start_date_entry.get(),
+            'end_date': self.app.end_date_entry.get(),
+            'last_capital': self._last_capital,
+            'theme': self._current_theme,
+        }
+        try:
+            with open(SESSION_STATE_PATH, 'w', encoding='utf-8') as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _load_session_state(self) -> None:
+        import json
+        if not os.path.exists(SESSION_STATE_PATH):
+            return
+        try:
+            with open(SESSION_STATE_PATH, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            if 'last_ticker' in state and state['last_ticker']:
+                self.app.stock_combobox.set(state['last_ticker'])
+                self.app._load_ticker_settings()
+            if 'start_date' in state:
+                self.app.start_date_entry.delete(0, tk.END)
+                self.app.start_date_entry.insert(0, state['start_date'])
+            if 'end_date' in state:
+                self.app.end_date_entry.delete(0, tk.END)
+                self.app.end_date_entry.insert(0, state['end_date'])
+            if 'last_capital' in state:
+                self._last_capital = state['last_capital']
+            if 'theme' in state and state['theme'] == 'dark':
+                self._toggle_theme()
+        except Exception:
+            pass
+
+    def _toggle_theme(self):
+        if not HAS_SV_TTK:
+            return
+        self._current_theme = 'dark' if self._current_theme == 'light' else 'light'
+        sv_ttk.set_theme(self._current_theme)
+        self._apply_text_theme()
+        if self._theme_btn:
+            self._theme_btn.config(text='☀️ Светлая' if self._current_theme == 'dark' else '🌙 Тёмная')
+
+    def _apply_text_theme(self):
+        is_dark = self._current_theme == 'dark'
+        bg = self.DARK_TEXT_BG if is_dark else self.LIGHT_TEXT_BG
+        fg = self.DARK_TEXT_FG if is_dark else self.LIGHT_TEXT_FG
+        for w in (self.app.result_text, self.app.backtest_text):
+            w.config(bg=bg, fg=fg, insertbackground=fg)
+        if hasattr(self.scanner_ui, 'scanner_result_text'):
+            self.scanner_ui.scanner_result_text.config(bg=bg, fg=fg, insertbackground=fg)
+        if hasattr(self.scanner_ui, '_legend_text_widget'):
+            self.scanner_ui._legend_text_widget.config(bg=bg, fg=fg)
+        import matplotlib.pyplot as plt
+        plt.style.use('dark_background' if is_dark else 'default')
+
+    def _on_toggle_favorite(self, ticker):
+        from utils import save_favorites
+        self._favorites = toggle_favorite(list(self._favorites), ticker)
+        save_favorites(self._favorites)
+        return self._favorites
+
+    def _on_close(self) -> None:
+        try:
+            self._save_session_state()
+        except Exception:
+            pass
+        self.root.destroy()
 
     def get_moex_tickers(self) -> list[str]:
         """Получение списка тикеров MOEX"""
@@ -227,6 +331,7 @@ class CreateStrategyApp:
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         total_days = (end_dt - start_dt).days
         self.app.result_text.insert(tk.END, f"\nСвечей: {len(stock_data)}, период: ~{total_days} дн.")
+        self._save_session_state()
 
     def on_select(self) -> None:
         """Обработка выбора акции и дат (асинхронная загрузка)"""
@@ -292,7 +397,7 @@ class CreateStrategyApp:
                     atr_series = calc_atr(df, params.get('atr_period', 14))
                     if not atr_series.empty and not atr_series.isna().iloc[-1]:
                         atr_value = atr_series.iloc[-1]
-                        last_candles = params.get('last_candles', 10)
+                        last_candles = DEFAULT_LAST_CANDLES
                         levels_strength = calculate_level_strength(trades, last_candles=last_candles)
                         if levels_strength and last_price and atr_value:
                             atr_sl_val = params.get('atr_sl', 1.0)
@@ -318,6 +423,8 @@ class CreateStrategyApp:
         self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         self.app.display_backtest_results(metrics)
         self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
+        if params and 'capital' in params:
+            self._last_capital = params['capital']
         if signal:
             self.app.display_recommendation(signal)
             self.app.set_last_analysis(signal, params)
@@ -682,7 +789,7 @@ class CreateStrategyApp:
         win.title("Анализ сделок")
         win.geometry("900x600")
 
-        capital = 1_000_000
+        capital = self._last_capital
         equity = [capital]
         dates = [closed[0].date[:10]]
         running = capital

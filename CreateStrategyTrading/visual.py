@@ -5,6 +5,8 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 
+from utils import normalize_numeric_params, sort_tickers_by_favorites
+
 
 
 def _add_copy_menu(text_widget):
@@ -30,21 +32,34 @@ def _add_copy_menu(text_widget):
 class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
                  get_moex_tickers, on_backtest, on_diary=None,
-                 on_show_settings=None):
+                 on_show_settings=None, favorites=None, on_toggle_favorite=None):
         self.root = parent.winfo_toplevel()
         self.parent = parent
         self._last_signal = None
         self._last_params = None
+        self._favorites = favorites or []
+        self._on_toggle_favorite = on_toggle_favorite
 
         all_tickers = get_moex_tickers()
+        self._all_tickers = sort_tickers_by_favorites(all_tickers, self._favorites)
 
         label_stock = ttk.Label(parent, text="Тикер:")
         label_stock.grid(row=0, column=0, padx=5, pady=5, sticky='e')
-        self.stock_combobox = ttk.Combobox(parent, values=all_tickers, width=25)
-        self.stock_combobox.grid(row=0, column=1, padx=5, pady=5, sticky='w')
+        ticker_frame = ttk.Frame(parent)
+        ticker_frame.grid(row=0, column=1, padx=5, pady=5, sticky='w')
+        self.stock_combobox = ttk.Combobox(ticker_frame, values=self._all_tickers, width=25)
+        self.stock_combobox.pack(side=tk.LEFT)
         if all_tickers:
-            self.stock_combobox.set(all_tickers[0])
-        self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: self._load_ticker_settings())
+            self.stock_combobox.set(all_tickers[0] if self._all_tickers else all_tickers[0])
+
+        self._star_btn = ttk.Button(ticker_frame, text='★', width=3,
+                                    command=self._toggle_current_favorite)
+        self._star_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self._update_star_button()
+        self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: (self._restore_ticker_list(), self._load_ticker_settings(), self._update_star_button()))
+
+        self._autocomplete_hit = False
+        self.stock_combobox.bind('<KeyRelease>', self._on_ticker_keyrelease)
 
         label_start = ttk.Label(parent, text="Начальная дата (гггг-мм-дд):")
         label_start.grid(row=1, column=0, padx=5, pady=5, sticky='e')
@@ -121,6 +136,44 @@ class StockAppVisual:
         self.backtest_text = tk.Text(parent, height=14, width=55)
         self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5)
         _add_copy_menu(self.backtest_text)
+
+    def _on_ticker_keyrelease(self, event):
+        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Escape'):
+            return
+        if self._autocomplete_hit:
+            self._autocomplete_hit = False
+            return
+        pattern = self.stock_combobox.get().strip()
+        if not pattern:
+            self.stock_combobox['values'] = self._all_tickers
+            return
+        filtered = [t for t in self._all_tickers if pattern.upper() in t]
+        if filtered:
+            self.stock_combobox['values'] = filtered
+            self.stock_combobox.event_generate('<Down>')
+            self._autocomplete_hit = True
+
+    def _restore_ticker_list(self):
+        self.stock_combobox['values'] = self._all_tickers
+
+    def _is_favorite(self, ticker):
+        return ticker in self._favorites
+
+    def _update_star_button(self):
+        ticker = self.stock_combobox.get()
+        self._star_btn.config(text='★' if self._is_favorite(ticker) else '☆')
+
+    def _toggle_current_favorite(self):
+        ticker = self.stock_combobox.get()
+        if not ticker or not self._on_toggle_favorite:
+            return
+        self._favorites = self._on_toggle_favorite(ticker)
+        self._all_tickers = sort_tickers_by_favorites(self._all_tickers, self._favorites)
+        current = self.stock_combobox.get()
+        self.stock_combobox['values'] = self._all_tickers
+        if current in self._all_tickers:
+            self.stock_combobox.set(current)
+        self._update_star_button()
 
     def add_backtest_result(self, text):
         self.backtest_text.delete(1.0, tk.END)
@@ -281,7 +334,7 @@ class StockAppVisual:
             self._strategy_combo.set(display_name)
         self._rebuild_params()
 
-        saved_params = saved.get('params', {})
+        saved_params = normalize_numeric_params(saved.get('params', {}))
         for key, entry in self._param_entries.items():
             if key in saved_params:
                 entry.delete(0, tk.END)
