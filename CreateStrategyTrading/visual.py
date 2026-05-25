@@ -397,23 +397,29 @@ class ScannerUI:
 
 class DiaryUI:
     COLUMNS = ('date', 'ticker', 'side', 'entry_price', 'sl_price',
-               'tp_price', 'volume', 'qty', 'status')
+               'tp_price', 'volume', 'qty', 'status', 'exit_price',
+               'exit_reason', 'pnl')
 
     HEADERS = {
         'date': 'Дата', 'ticker': 'Тикер', 'side': 'Напр.',
         'entry_price': 'Цена входа', 'sl_price': 'SL', 'tp_price': 'TP',
-        'volume': 'Объём (₽)', 'qty': 'Кол-во', 'status': 'Статус'
+        'volume': 'Объём (₽)', 'qty': 'Кол-во', 'status': 'Статус',
+        'exit_price': 'Цена выхода', 'exit_reason': 'Причина', 'pnl': 'P&L'
     }
 
     WIDTHS = {
-        'date': 140, 'ticker': 70, 'side': 60, 'entry_price': 90,
-        'sl_price': 80, 'tp_price': 80, 'volume': 100, 'qty': 80, 'status': 70
+        'date': 130, 'ticker': 65, 'side': 55, 'entry_price': 80,
+        'sl_price': 70, 'tp_price': 70, 'volume': 90, 'qty': 70,
+        'status': 60, 'exit_price': 80, 'exit_reason': 70, 'pnl': 70
     }
 
-    def __init__(self, parent, storage, on_close_entry=None):
+    def __init__(self, parent, storage, on_close_entry=None,
+                 on_check_positions=None, on_show_analysis=None):
         self.parent = parent
         self.storage = storage
         self._on_close_entry = on_close_entry
+        self._on_check_positions = on_check_positions
+        self._on_show_analysis = on_show_analysis
 
         top_frame = ttk.Frame(parent)
         top_frame.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
@@ -440,10 +446,14 @@ class DiaryUI:
         btn_frame = ttk.Frame(top_frame)
         btn_frame.pack(fill=tk.X, pady=(5, 0))
 
-        ttk.Button(btn_frame, text='Экспорт CSV',
-                   command=self._export_csv).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Проверить позиции',
+                   command=self._check_positions).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Анализ сделок',
+                   command=self._show_analysis).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text='Закрыть сделку',
                    command=self._close_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Экспорт CSV',
+                   command=self._export_csv).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text='Обновить',
                    command=self.refresh).pack(side=tk.LEFT, padx=2)
 
@@ -456,9 +466,29 @@ class DiaryUI:
         for e in entries:
             values = (
                 e.date, e.ticker, e.side, e.entry_price,
-                e.sl_price, e.tp_price, e.volume, e.qty, e.status
+                e.sl_price, e.tp_price, e.volume, e.qty, e.status,
+                e.exit_price_display, e.exit_reason or '', e.pnl_text
             )
-            self.tree.insert('', 'end', values=values)
+            tags = ()
+            if e.is_open:
+                tags = ('open',)
+            elif e.pnl is not None and e.pnl > 0:
+                tags = ('win',)
+            elif e.pnl is not None and e.pnl <= 0:
+                tags = ('loss',)
+            item = self.tree.insert('', 'end', values=values, tags=tags)
+
+        self.tree.tag_configure('win', foreground='green')
+        self.tree.tag_configure('loss', foreground='red')
+        self.tree.tag_configure('open', foreground='blue')
+
+    def _check_positions(self):
+        if self._on_check_positions:
+            self._on_check_positions()
+
+    def _show_analysis(self):
+        if self._on_show_analysis:
+            self._on_show_analysis()
 
     def _close_selected(self):
         sel = self.tree.selection()
@@ -483,7 +513,8 @@ class DiaryUI:
             for e in entries:
                 writer.writerow([
                     e.date, e.ticker, e.side, e.entry_price,
-                    e.sl_price, e.tp_price, e.volume, e.qty, e.status
+                    e.sl_price, e.tp_price, e.volume, e.qty, e.status,
+                    e.exit_price_display, e.exit_reason or '', e.pnl_text
                 ])
         import tkinter.messagebox as mb
         mb.showinfo('Экспорт', f'Дневник сохранён:\n{path}')

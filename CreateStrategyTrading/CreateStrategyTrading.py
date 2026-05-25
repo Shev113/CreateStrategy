@@ -136,7 +136,11 @@ class CreateStrategyApp:
             on_excel=self.on_export_excel, on_diary=self.on_add_to_diary
         )
 
-        self.diary_ui = DiaryUI(tab_diary, storage=self.diary_storage)
+        self.diary_ui = DiaryUI(
+            tab_diary, storage=self.diary_storage,
+            on_check_positions=self.on_check_positions,
+            on_show_analysis=self.on_show_analysis
+        )
 
     def bind_events(self) -> None:
         """Привязка событий"""
@@ -561,7 +565,7 @@ class CreateStrategyApp:
             qty = calc_position_qty(capital, risk_per_trade, entry_price, sl_price)
             volume = calc_position_volume(capital, risk_per_trade, entry_price, sl_price)
 
-            var = tk.BooleanVar(value=True)
+            var = tk.BooleanVar(value=False)
             vars_map[ticker] = {
                 'var': var,
                 'ticker': ticker,
@@ -632,6 +636,106 @@ class CreateStrategyApp:
         win.protocol('WM_DELETE_WINDOW', lambda: (
             canvas.unbind_all('<MouseWheel>'), win.destroy()
         ))
+
+    def on_check_positions(self) -> None:
+        """Проверить открытые позиции — закрыть по SL/TP"""
+        if not self.diary_ui:
+            return
+
+        def task():
+            try:
+                updated = self.diary_storage.check_positions(self.get_stock_data)
+                self.root.after(0, lambda: self._on_check_positions_done(updated))
+            except Exception as e:
+                self.root.after(0, lambda: self.diary_ui.refresh())
+                logging.exception('Check positions error')
+
+        self.diary_ui.refresh()
+        t = threading.Thread(target=task, daemon=True)
+        t.start()
+
+    def _on_check_positions_done(self, updated):
+        self.diary_ui.refresh()
+        import tkinter.messagebox as mb
+        if updated:
+            mb.showinfo('Проверка позиций',
+                        f'Закрыто по SL/TP: {updated} сделок.')
+        else:
+            mb.showinfo('Проверка позиций',
+                        'Открытые позиции без изменений.')
+
+    def on_show_analysis(self) -> None:
+        """Показать окно анализа сделок с equity curve"""
+        entries = self.diary_storage.load()
+        closed = [e for e in entries if e.status == 'closed' and e.pnl is not None]
+        if not closed:
+            import tkinter.messagebox as mb
+            mb.showwarning('Анализ', 'Нет закрытых сделок для анализа.')
+            return
+
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+        win = tk.Toplevel(self.root)
+        win.title("Анализ сделок")
+        win.geometry("900x600")
+
+        capital = 1_000_000
+        equity = [capital]
+        dates = [closed[0].date[:10]]
+        running = capital
+
+        cumulative_pnl = 0
+        wins = 0
+        losses = 0
+
+        for e in closed:
+            running += (e.pnl or 0)
+            equity.append(running)
+            dates.append(e.exit_date[:10] if e.exit_date else e.date[:10])
+            cumulative_pnl += (e.pnl or 0)
+            if (e.pnl or 0) > 0:
+                wins += 1
+            else:
+                losses += 1
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [3, 1]})
+
+        ax1.plot(dates, equity, 'b-', linewidth=1.5, label='Капитал')
+        ax1.fill_between(dates, capital, equity, alpha=0.1, color='blue')
+        ax1.axhline(y=capital, color='gray', linestyle='--', linewidth=0.8)
+        ax1.set_ylabel('Капитал (₽)')
+        ax1.set_title('Кривая капитала')
+        ax1.legend()
+        ax1.tick_params(axis='x', rotation=45)
+        ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:,.0f}'))
+
+        total_pnl = sum(e.pnl for e in closed)
+        total_trades = len(closed)
+        win_rate = (wins / total_trades * 100) if total_trades else 0
+
+        stats_text = (
+            f'Сделок: {total_trades} | '
+            f'Win Rate: {win_rate:.1f}% | '
+            f'Прибыль: {total_pnl:+,.0f} ₽ | '
+            f'Текущий капитал: {running:,.0f} ₽'
+        )
+
+        ax2.axis('off')
+        ax2.text(0.5, 0.5, stats_text, ha='center', va='center',
+                 fontsize=12, fontfamily='monospace',
+                 bbox=dict(boxstyle='round,pad=0.8', facecolor='lightgray'))
+
+        fig.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+
+        from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+        toolbar = NavigationToolbar2Tk(canvas, win)
+        toolbar.update()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
 
     def on_show_legend(self) -> None:
         """Показать окно с легендой сигналов"""
