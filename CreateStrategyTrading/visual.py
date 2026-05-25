@@ -1,5 +1,6 @@
 ﻿# visual.py
 # -*- coding: utf-8 -*-
+import os
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
@@ -156,11 +157,12 @@ class StockAppVisual:
 
 
 class ScannerUI:
-    def __init__(self, parent, sectors, on_scan, on_legend=None, on_excel=None):
+    def __init__(self, parent, sectors, on_scan, on_legend=None, on_excel=None, on_diary=None):
         self.parent = parent
         self.root = parent.winfo_toplevel()
         self._on_legend = on_legend
         self._on_excel = on_excel
+        self._on_diary = on_diary
         self._strategy_id_map = {}
         self._strategy_names = []
 
@@ -240,6 +242,12 @@ class ScannerUI:
             command=lambda: self._request_excel())
         self.export_excel_button.pack(side=tk.LEFT, padx=5)
         self.export_excel_button.config(state='disabled')
+
+        self.diary_button = ttk.Button(
+            btn_frame, text="В дневник",
+            command=lambda: self._request_diary())
+        self.diary_button.pack(side=tk.LEFT, padx=5)
+        self.diary_button.config(state='disabled')
 
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
@@ -334,6 +342,10 @@ class ScannerUI:
         if self._on_excel:
             self._on_excel()
 
+    def _request_diary(self):
+        if self._on_diary:
+            self._on_diary()
+
     def get_selected_sectors(self):
         return [s for s, v in self.sector_vars.items() if v.get()]
 
@@ -379,4 +391,99 @@ class ScannerUI:
         else:
             self.scan_button.config(state='normal', text='Запустить сканер')
             self.export_excel_button.config(state='normal')
+            self.diary_button.config(state='normal')
             self.status_var.set('Завершено')
+
+
+class DiaryUI:
+    COLUMNS = ('date', 'ticker', 'side', 'entry_price', 'sl_price',
+               'tp_price', 'volume', 'qty', 'status')
+
+    HEADERS = {
+        'date': 'Дата', 'ticker': 'Тикер', 'side': 'Напр.',
+        'entry_price': 'Цена входа', 'sl_price': 'SL', 'tp_price': 'TP',
+        'volume': 'Объём (₽)', 'qty': 'Кол-во', 'status': 'Статус'
+    }
+
+    WIDTHS = {
+        'date': 140, 'ticker': 70, 'side': 60, 'entry_price': 90,
+        'sl_price': 80, 'tp_price': 80, 'volume': 100, 'qty': 80, 'status': 70
+    }
+
+    def __init__(self, parent, storage, on_close_entry=None):
+        self.parent = parent
+        self.storage = storage
+        self._on_close_entry = on_close_entry
+
+        top_frame = ttk.Frame(parent)
+        top_frame.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        tree_frame = ttk.Frame(top_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.tree = ttk.Treeview(
+            tree_frame, columns=self.COLUMNS, show='headings',
+            height=20, selectmode='browse'
+        )
+
+        for col in self.COLUMNS:
+            self.tree.heading(col, text=self.HEADERS[col])
+            self.tree.column(col, width=self.WIDTHS[col], anchor='center')
+
+        scroll_y = ttk.Scrollbar(tree_frame, orient='vertical',
+                                 command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll_y.set)
+
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+
+        btn_frame = ttk.Frame(top_frame)
+        btn_frame.pack(fill=tk.X, pady=(5, 0))
+
+        ttk.Button(btn_frame, text='Экспорт CSV',
+                   command=self._export_csv).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Закрыть сделку',
+                   command=self._close_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Обновить',
+                   command=self.refresh).pack(side=tk.LEFT, padx=2)
+
+        self.refresh()
+
+    def refresh(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        entries = self.storage.load()
+        for e in entries:
+            values = (
+                e.date, e.ticker, e.side, e.entry_price,
+                e.sl_price, e.tp_price, e.volume, e.qty, e.status
+            )
+            self.tree.insert('', 'end', values=values)
+
+    def _close_selected(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self.tree.index(sel[0])
+        self.storage.close_entry(idx)
+        self.refresh()
+        if self._on_close_entry:
+            self._on_close_entry(idx)
+
+    def _export_csv(self):
+        import csv
+        from datetime import datetime
+        os.makedirs('results', exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        path = f'results/diary_{ts}.csv'
+        entries = self.storage.load()
+        with open(path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            writer.writerow(list(self.HEADERS.values()))
+            for e in entries:
+                writer.writerow([
+                    e.date, e.ticker, e.side, e.entry_price,
+                    e.sl_price, e.tp_price, e.volume, e.qty, e.status
+                ])
+        import tkinter.messagebox as mb
+        mb.showinfo('Экспорт', f'Дневник сохранён:\n{path}')

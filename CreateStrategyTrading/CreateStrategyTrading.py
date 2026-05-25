@@ -22,7 +22,8 @@ from screening.sectors import SectorDB
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
 from strategy.levels import find_horizontal_levels, round_to_tolerance
-from visual import StockAppVisual, ScannerUI, _add_copy_menu
+from visual import StockAppVisual, ScannerUI, DiaryUI, _add_copy_menu
+from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_position_volume
 
 # Настройка логирования
 logging.basicConfig(
@@ -59,9 +60,11 @@ class CreateStrategyApp:
         self.state = StrategyAppState()
         self.app = None
         self.scanner_ui = None
+        self.diary_ui = None
         self.sector_db = SectorDB()
         self._last_scan_results = []
         self._last_scan_params = {}
+        self.diary_storage = DiaryStorage()
         self.setup_ui()
         self.bind_events()
 
@@ -117,8 +120,10 @@ class CreateStrategyApp:
 
         tab_analysis = ttk.Frame(notebook)
         tab_scanner = ttk.Frame(notebook)
+        tab_diary = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
         notebook.add(tab_scanner, text='Сканер')
+        notebook.add(tab_diary, text='Дневник сделок')
 
         self.app = StockAppVisual(
             tab_analysis, self.on_select, self.on_plot_button, self.on_export_button,
@@ -127,8 +132,11 @@ class CreateStrategyApp:
 
         self.scanner_ui = ScannerUI(
             tab_scanner, sectors=self.sector_db.get_all_sectors(),
-            on_scan=self.on_scanner, on_legend=self.on_show_legend, on_excel=self.on_export_excel
+            on_scan=self.on_scanner, on_legend=self.on_show_legend,
+            on_excel=self.on_export_excel, on_diary=self.on_add_to_diary
         )
+
+        self.diary_ui = DiaryUI(tab_diary, storage=self.diary_storage)
 
     def bind_events(self) -> None:
         """Привязка событий"""
@@ -486,6 +494,144 @@ class CreateStrategyApp:
             self.scanner_ui.show_report("Ошибка: установите openpyxl (pip install openpyxl)")
         except Exception as e:
             self.scanner_ui.show_report(f"Ошибка экспорта: {str(e)}")
+
+    def on_add_to_diary(self) -> None:
+        """Добавить выбранные сигналы в торговый дневник"""
+        results = self._last_scan_results
+        if not results:
+            self.scanner_ui.show_report("Ошибка: сначала запустите сканер.")
+            return
+
+        actionable = [r for r in results if r['signal']['action'] in ('BUY', 'SELL')]
+        if not actionable:
+            self.scanner_ui.show_report("Нет сигналов BUY/SELL для добавления.")
+            return
+
+        params = self._last_scan_params
+        capital = params.get('capital', 1_000_000)
+        risk_per_trade = params.get('risk_per_trade', 0.02)
+
+        win = tk.Toplevel(self.root)
+        win.title("Добавить в дневник")
+        win.geometry("750x500")
+        win.transient(self.root)
+        win.grab_set()
+
+        frame = ttk.Frame(win)
+        frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
+
+        vars_map = {}
+
+        list_frame = ttk.Frame(frame)
+        list_frame.pack(fill=tk.BOTH, expand=1)
+
+        canvas = tk.Canvas(list_frame)
+        scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=canvas.yview)
+        scrollable = ttk.Frame(canvas)
+
+        scrollable.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=scrollable, anchor='nw')
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        ttk.Label(scrollable, text='',
+                  font=('', 9, 'bold')).grid(row=0, column=0, sticky='w', padx=2)
+        ttk.Label(scrollable, text='Тикер', font=('', 9, 'bold')).grid(
+            row=0, column=1, sticky='w', padx=5)
+        ttk.Label(scrollable, text='Сигнал', font=('', 9, 'bold')).grid(
+            row=0, column=2, sticky='w', padx=5)
+        ttk.Label(scrollable, text='Цена', font=('', 9, 'bold')).grid(
+            row=0, column=3, sticky='w', padx=5)
+        ttk.Label(scrollable, text='SL', font=('', 9, 'bold')).grid(
+            row=0, column=4, sticky='w', padx=5)
+        ttk.Label(scrollable, text='TP', font=('', 9, 'bold')).grid(
+            row=0, column=5, sticky='w', padx=5)
+        ttk.Label(scrollable, text='Объём (₽)', font=('', 9, 'bold')).grid(
+            row=0, column=6, sticky='w', padx=5)
+
+        for idx, r in enumerate(actionable, 1):
+            sig = r['signal']
+            ticker = r['ticker']
+            action = sig['action']
+            entry_price = r.get('last_price') or sig['level'] or 0
+            sl_price = sig.get('sl_price', 0)
+            tp_price = sig.get('tp_price', 0)
+            qty = calc_position_qty(capital, risk_per_trade, entry_price, sl_price)
+            volume = calc_position_volume(capital, risk_per_trade, entry_price, sl_price)
+
+            var = tk.BooleanVar(value=True)
+            vars_map[ticker] = {
+                'var': var,
+                'ticker': ticker,
+                'action': action,
+                'entry_price': entry_price,
+                'sl_price': sl_price,
+                'tp_price': tp_price,
+                'qty': qty,
+                'volume': volume,
+                'date': datetime.now().strftime('%Y-%m-%d %H:%M')
+            }
+
+            cb = ttk.Checkbutton(scrollable, variable=var)
+            cb.grid(row=idx, column=0, padx=2, pady=1)
+
+            ttk.Label(scrollable, text=ticker).grid(
+                row=idx, column=1, sticky='w', padx=5)
+            ttk.Label(scrollable, text=action).grid(
+                row=idx, column=2, sticky='w', padx=5)
+            ttk.Label(scrollable, text=f'{entry_price:.2f}').grid(
+                row=idx, column=3, sticky='w', padx=5)
+            ttk.Label(scrollable, text=f'{sl_price:.2f}' if sl_price else '-').grid(
+                row=idx, column=4, sticky='w', padx=5)
+            ttk.Label(scrollable, text=f'{tp_price:.2f}' if tp_price else '-').grid(
+                row=idx, column=5, sticky='w', padx=5)
+            ttk.Label(scrollable, text=f'{volume:,.0f}').grid(
+                row=idx, column=6, sticky='w', padx=5)
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+
+        def add_selected():
+            entries = []
+            for info in vars_map.values():
+                if info['var'].get():
+                    side_map = {'BUY': 'LONG', 'SELL': 'SHORT'}
+                    entries.append(DiaryEntry(
+                        date=info['date'],
+                        ticker=info['ticker'],
+                        side=side_map.get(info['action'], info['action']),
+                        entry_price=info['entry_price'],
+                        sl_price=info['sl_price'],
+                        tp_price=info['tp_price'],
+                        volume=info['volume'],
+                        qty=info['qty'],
+                        status='open'
+                    ))
+            if entries:
+                self.diary_storage.add_entries(entries)
+                if self.diary_ui:
+                    self.diary_ui.refresh()
+                win.destroy()
+                self.scanner_ui.show_report(
+                    f"Добавлено в дневник: {len(entries)} сделок.")
+            else:
+                from tkinter import messagebox as mb
+                mb.showwarning('Нет выбора', 'Не выбрано ни одной сделки.')
+
+        ttk.Button(btn_frame, text='Добавить выбранные',
+                   command=add_selected).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text='Отмена',
+                   command=win.destroy).pack(side=tk.LEFT, padx=5)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+
+        canvas.bind_all('<MouseWheel>', _on_mousewheel)
+        win.protocol('WM_DELETE_WINDOW', lambda: (
+            canvas.unbind_all('<MouseWheel>'), win.destroy()
+        ))
 
     def on_show_legend(self) -> None:
         """Показать окно с легендой сигналов"""
