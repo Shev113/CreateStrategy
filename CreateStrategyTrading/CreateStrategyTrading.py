@@ -247,14 +247,13 @@ class CreateStrategyApp:
         import matplotlib.pyplot as plt
         plt.style.use('dark_background' if is_dark else 'default')
 
-    def _on_sectors_loaded(self, ticker_to_sector, sector_to_tickers):
+    def _on_sectors_loaded(self, all_tickers, ticker_to_sector, sector_to_tickers):
         if ticker_to_sector is None:
             self.app.set_tickers_loading(False)
             self.app.result_text.insert(tk.END, "Ошибка загрузки эмитентов (MOEX API недоступен)\n")
             return
         old_count = len(self.sector_db.get_all_tickers())
         self.sector_db.apply_dynamic_data(ticker_to_sector, sector_to_tickers)
-        all_tickers = self.get_moex_tickers()
         sector_map = self.sector_db.get_ticker_to_sector_map()
         self.app.update_ticker_list(all_tickers, sector_map)
         total = len(self.sector_db.get_tickers(self.sector_db.get_all_sectors()))

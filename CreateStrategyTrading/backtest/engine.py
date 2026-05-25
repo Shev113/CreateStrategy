@@ -29,7 +29,8 @@ class BacktestEngine:
     def __init__(self, capital=1_000_000, risk_per_trade=0.02,
                  atr_period=14, atr_sl=1.0, atr_tp=2.0,
                  min_hits=5, max_hold=20, commission=0.0005,
-                 tolerance=None, strategy='bounce', **strategy_kwargs):
+                 tolerance=None, strategy='bounce', entry_type=0,
+                 **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
         self.risk_per_trade = risk_per_trade
@@ -41,6 +42,7 @@ class BacktestEngine:
         self.commission = commission
         self.tolerance = tolerance
         self.strategy = strategy
+        self.entry_type = entry_type
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
@@ -94,16 +96,25 @@ class BacktestEngine:
                 signal = pending_signal
                 pending_signal = None
                 open_price = float(current_candle[0])
+                if self.entry_type == 1:
+                    level = float(signal['level'])
+                    lo = float(current_candle[3])
+                    hi = float(current_candle[2])
+                    if not (lo <= level <= hi):
+                        continue
+                    entry_price = level
+                else:
+                    entry_price = open_price
                 sl = signal['sl_price']
-                sl_dist = abs(open_price - sl) / open_price if open_price != 0 else 0.01
+                sl_dist = abs(entry_price - sl) / entry_price if entry_price != 0 else 0.01
                 if sl_dist > 0 and has_atr:
                     risk_amount = self.capital * self.risk_per_trade
-                    qty = risk_amount / (sl_dist * open_price)
+                    qty = risk_amount / (sl_dist * entry_price)
                     direction = 1 if signal['side'] == 'BUY' else -1
-                    tp = open_price + direction * self.atr_tp * atr
+                    tp = entry_price + direction * self.atr_tp * atr
                     position = {
                         'side': signal['side'],
-                        'entry_price': open_price,
+                        'entry_price': entry_price,
                         'sl': sl,
                         'tp': round(tp, 2),
                         'qty': qty,

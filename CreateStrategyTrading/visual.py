@@ -494,10 +494,18 @@ class StockAppVisual:
             row_num = i // 3
             ttk.Label(self._params_frame, text=pcfg['label'] + ':',
                       font=('', 8)).grid(row=row_num, column=col, padx=(0, 1), sticky='w')
-            entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
-            entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
-            entry.insert(0, str(pcfg['default']))
-            self._param_entries[pcfg['key']] = entry
+            if pcfg['key'] == 'entry_type':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=22, font=('', 8),
+                    values=['По рынку (open след. свечи)', 'По цене сигнала (лимитный)'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
+            else:
+                entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
+                entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                entry.insert(0, str(pcfg['default']))
+                self._param_entries[pcfg['key']] = entry
 
     def get_backtest_params(self):
         try:
@@ -507,6 +515,9 @@ class StockAppVisual:
 
             cfg_list = get_strategy_params(strategy_id)
             for key, entry in self._param_entries.items():
+                if isinstance(entry, ttk.Combobox):
+                    params[key] = entry.current()
+                    continue
                 raw = entry.get().strip()
                 cfg = next((c for c in cfg_list if c['key'] == key), None)
                 if cfg and cfg['type'] == int:
@@ -544,6 +555,9 @@ class StockAppVisual:
         }
         cfg_list = get_strategy_params(strategy_id)
         for key, entry in self._param_entries.items():
+            if isinstance(entry, ttk.Combobox):
+                data[ticker]['params'][key] = entry.current()
+                continue
             raw = entry.get().strip()
             cfg = next((c for c in cfg_list if c['key'] == key), None)
             if cfg and cfg['type'] == int:
@@ -575,8 +589,11 @@ class StockAppVisual:
         saved_params = normalize_numeric_params(saved.get('params', {}))
         for key, entry in self._param_entries.items():
             if key in saved_params:
-                entry.delete(0, tk.END)
-                entry.insert(0, str(saved_params[key]))
+                if isinstance(entry, ttk.Combobox):
+                    entry.current(int(saved_params[key]))
+                else:
+                    entry.delete(0, tk.END)
+                    entry.insert(0, str(saved_params[key]))
 
 
 class ScannerUI:
@@ -759,10 +776,18 @@ class ScannerUI:
             row_num = i // 3
             ttk.Label(self._params_frame, text=pcfg['label'] + ':',
                       font=('', 8)).grid(row=row_num, column=col, padx=(0, 1), sticky='w')
-            entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
-            entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
-            entry.insert(0, str(pcfg['default']))
-            self._param_entries[pcfg['key']] = entry
+            if pcfg['key'] == 'entry_type':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=22, font=('', 8),
+                    values=['По рынку (open след. свечи)', 'По цене сигнала (лимитный)'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
+            else:
+                entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
+                entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                entry.insert(0, str(pcfg['default']))
+                self._param_entries[pcfg['key']] = entry
 
     def _toggle_legend(self):
         if self._legend_frame.winfo_viewable():
@@ -799,6 +824,9 @@ class ScannerUI:
 
             cfg_list = get_strategy_params(strategy_id)
             for key, entry in self._param_entries.items():
+                if isinstance(entry, ttk.Combobox):
+                    params[key] = entry.current()
+                    continue
                 raw = entry.get().strip()
                 cfg = next((c for c in cfg_list if c['key'] == key), None)
                 if cfg and cfg['type'] == int:

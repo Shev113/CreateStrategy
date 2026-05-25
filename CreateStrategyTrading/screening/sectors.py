@@ -81,18 +81,18 @@ class SectorDB:
                 import tkinter as tk
                 root = tk._default_root
                 if root is not None:
-                    root.after(0, on_complete, new_ticker_to_sector, new_sector_to_tickers)
+                    root.after(0, on_complete, all_tickers, new_ticker_to_sector, new_sector_to_tickers)
                 else:
-                    on_complete(new_ticker_to_sector, new_sector_to_tickers)
+                    on_complete(all_tickers, new_ticker_to_sector, new_sector_to_tickers)
         except Exception:
             logging.warning("Failed to fetch MOEX sector data, using static sectors only")
             if on_complete:
                 import tkinter as tk
                 root = tk._default_root
                 if root is not None:
-                    root.after(0, on_complete, None, None)
+                    root.after(0, on_complete, None, None, None)
                 else:
-                    on_complete(None, None)
+                    on_complete(None, None, None)
 
     def apply_dynamic_data(self, ticker_to_sector, sector_to_tickers):
         self._ticker_to_sector = ticker_to_sector

@@ -19,6 +19,7 @@ STRATEGY_REGISTRY = {
              'hint': 'Через сколько свечей закрыть сделку, если не сработали SL/TP'},
             {'key': 'commission', 'label': 'Комиссия %', 'default': 0.05, 'type': float,
              'hint': 'Комиссия брокера за сделку'},
+            {'key': 'entry_type', 'label': 'Тип входа', 'default': 0, 'type': int},
         ]
     },
     'breakout': {
@@ -42,6 +43,7 @@ STRATEGY_REGISTRY = {
              'hint': 'Комиссия брокера за сделку'},
             {'key': 'breakout_threshold', 'label': 'Порог пробоя (ATR)', 'default': 0.3, 'type': float,
              'hint': 'Множитель ATR — насколько цена должна уйти за уровень'},
+            {'key': 'entry_type', 'label': 'Тип входа', 'default': 0, 'type': int},
         ]
     },
     'rsi_levels': {
@@ -71,6 +73,7 @@ STRATEGY_REGISTRY = {
              'hint': 'Уровень RSI для перекупленности (SELL)'},
             {'key': 'level_proximity', 'label': 'Дист. до уровня (ATR)', 'default': 0.5, 'type': float,
              'hint': 'Множитель ATR — макс. расстояние до уровня'},
+            {'key': 'entry_type', 'label': 'Тип входа', 'default': 0, 'type': int},
         ]
     },
 }
