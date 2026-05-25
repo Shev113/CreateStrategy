@@ -1,6 +1,5 @@
 # bounce.py
 from .indicators import is_bullish_rejection, is_bearish_rejection
-from .levels import find_horizontal_levels
 
 
 def check_bounce(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0):

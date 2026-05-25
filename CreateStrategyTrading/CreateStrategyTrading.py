@@ -5,7 +5,6 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta
-from collections import Counter
 
 import pandas as pd
 import requests
@@ -25,7 +24,7 @@ from screening.scanner import Scanner
 from screening.sectors import SectorDB
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
-from strategy.levels import find_horizontal_levels, round_to_tolerance
+from strategy.levels import find_strong_zones
 from visual import StockAppVisual, ScannerUI, DiaryUI, _add_copy_menu
 from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_position_volume
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites
@@ -55,7 +54,7 @@ class StrategyAppState:
     def __init__(self):
         self.stock_data = None
         self.current_step = 0
-        self.horizontal_lines = []
+        self.strong_zones = []
         self.df = None
 
 
@@ -307,22 +306,18 @@ class CreateStrategyApp:
         if min_hits < 1:
             min_hits = 1
 
-        self.state.horizontal_lines = find_horizontal_levels(
-            stock_data, min_hits=min_hits)
-
+        self.state.strong_zones = []
         if self.state.df is not None and len(stock_data) > 0:
-            avg_price = sum(float(c[3]) for c in stock_data if c and len(c) >= 4) / len(stock_data)
-            tolerance = avg_price * 0.005
-            price_counter = Counter()
-            for c in stock_data:
-                if c and len(c) >= 4:
-                    price_counter[round_to_tolerance(float(c[1]), tolerance)] += 1
-                    price_counter[round_to_tolerance(float(c[2]), tolerance)] += 1
-                    price_counter[round_to_tolerance(float(c[3]), tolerance)] += 1
-
-            for price in self.state.horizontal_lines:
-                count = price_counter.get(price, 0)
-                self.app.result_text.insert(tk.END, f"Price: {price:.2f}, Count: {count}\n")
+            atr_series = calc_atr(self.state.df, 14)
+            avg_atr = atr_series.mean()
+            if not pd.isna(avg_atr) and avg_atr > 0:
+                self.state.strong_zones = find_strong_zones(
+                    stock_data, atr_value=avg_atr, min_hits=min_hits, max_zones=6)
+                for price, count in self.state.strong_zones:
+                    self.app.result_text.insert(
+                        tk.END, f"Зона: {price:.2f}, касаний: {count}\n")
+            else:
+                self.app.result_text.insert(tk.END, "Недостаточно данных для ATR\n")
 
         self.state.current_step = 0
         self.app.get_data_button.config(state='normal', text='1. Получить данные')
@@ -332,6 +327,7 @@ class CreateStrategyApp:
         total_days = (end_dt - start_dt).days
         self.app.result_text.insert(tk.END, f"\nСвечей: {len(stock_data)}, период: ~{total_days} дн.")
         self._save_session_state()
+        self.app.update_chart(self.state.df, strong_zones=self.state.strong_zones)
 
     def on_select(self) -> None:
         """Обработка выбора акции и дат (асинхронная загрузка)"""
@@ -413,13 +409,13 @@ class CreateStrategyApp:
                                 signal['last_price'] = last_price
                                 signal['atr'] = atr_value
 
-            self.root.after(0, lambda: self._on_backtest_complete(
-                trades, metrics, csv_path, json_path, selected_stock, signal, params))
+            self.root.after(0, lambda e=engine: self._on_backtest_complete(
+                trades, metrics, csv_path, json_path, selected_stock, signal, params, engine=e))
         except Exception as e:
             self.root.after(0, lambda: self._on_backtest_error(str(e)))
 
     def _on_backtest_complete(self, trades, metrics, csv_path, json_path,
-                              selected_stock, signal=None, params=None):
+                              selected_stock, signal=None, params=None, engine=None):
         self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         self.app.display_backtest_results(metrics)
         self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
@@ -428,6 +424,16 @@ class CreateStrategyApp:
         if signal:
             self.app.display_recommendation(signal)
             self.app.set_last_analysis(signal, params)
+        engine_levels = engine.last_levels if engine else []
+        if signal:
+            sl_price = signal.get('sl_price')
+            tp_price = signal.get('tp_price')
+        else:
+            sl_price = tp_price = None
+        self.app.add_post_backtest_lines(
+            engine_levels=engine_levels,
+            sl_price=sl_price,
+            tp_price=tp_price)
 
     def _on_backtest_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")

@@ -5,6 +5,8 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 
+import pandas as pd
+
 from utils import normalize_numeric_params, sort_tickers_by_favorites
 
 
@@ -34,11 +36,38 @@ class StockAppVisual:
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, favorites=None, on_toggle_favorite=None):
         self.root = parent.winfo_toplevel()
-        self.parent = parent
         self._last_signal = None
         self._last_params = None
         self._favorites = favorites or []
         self._on_toggle_favorite = on_toggle_favorite
+
+        # Разделяем вкладку на левую панель (управление) и правую (график)
+        parent.grid_columnconfigure(0, weight=0, minsize=480)
+        parent.grid_columnconfigure(1, weight=1)
+        parent.grid_rowconfigure(0, weight=1)
+
+        left_frame = ttk.Frame(parent)
+        left_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
+        left_frame.grid_rowconfigure(11, weight=1)
+
+        chart_frame = ttk.Frame(parent)
+        chart_frame.grid(row=0, column=1, sticky='nsew')
+        self._chart_frame = chart_frame
+
+        self._chart_placeholder = ttk.Label(
+            chart_frame, text="Загрузите данные для отображения графика",
+            anchor='center', font=('', 11))
+        self._chart_placeholder.pack(fill=tk.BOTH, expand=1)
+
+        self._chart_figure = None
+        self._chart_canvas = None
+        self._chart_toolbar = None
+        self._chart_ax = None
+        self._chart_lines = []
+
+        # Все дальнейшие виджеты идут в левую панель
+        parent = left_frame
+        self.parent = parent
 
         all_tickers = get_moex_tickers()
         self._all_tickers = sort_tickers_by_favorites(all_tickers, self._favorites)
@@ -73,8 +102,11 @@ class StockAppVisual:
         self.end_date_entry.grid(row=2, column=1, padx=5, pady=5, sticky='w')
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
-        self.result_text = tk.Text(parent, height=12, width=55)
-        self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+        parent.grid_rowconfigure(3, weight=1)
+        parent.grid_rowconfigure(11, weight=2)
+
+        self.result_text = tk.Text(parent, height=6, width=55)
+        self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.result_text)
 
         self.get_data_button = ttk.Button(
@@ -133,8 +165,8 @@ class StockAppVisual:
             parent, text="2. Запустить Backtest", command=on_backtest)
         self.backtest_button.grid(row=10, column=0, columnspan=2, pady=5)
 
-        self.backtest_text = tk.Text(parent, height=14, width=55)
-        self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5)
+        self.backtest_text = tk.Text(parent, height=8, width=55)
+        self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
 
     def _on_ticker_keyrelease(self, event):
@@ -174,6 +206,138 @@ class StockAppVisual:
         if current in self._all_tickers:
             self.stock_combobox.set(current)
         self._update_star_button()
+
+    def _prepare_df_for_chart(self, df):
+        if df is None or df.empty:
+            return None
+        cols = {'Open', 'High', 'Low', 'Close', 'Volume'}
+        if not cols.issubset(set(df.columns)):
+            return None
+        chart_df = df[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
+        chart_df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+        chart_df.index = pd.to_datetime(df.index)
+        return chart_df
+
+    def update_chart(self, df, strong_zones=None, engine_levels=None):
+        import matplotlib
+        matplotlib.use('TkAgg')
+        import matplotlib.pyplot as plt
+        import mplfinance as mpf
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+
+        chart_df = self._prepare_df_for_chart(df)
+        if chart_df is None or chart_df.empty:
+            return
+
+        if self._chart_figure is not None:
+            return
+
+        for w in self._chart_frame.winfo_children():
+            w.destroy()
+
+        n_points = len(chart_df)
+        fig, axes = mpf.plot(
+            chart_df, type='candle', style='charles',
+            volume=True,
+            returnfig=True,
+            figsize=(8, 6),
+            figscale=1.0,
+            warn_too_much_data=n_points + 1
+        )
+
+        ax = axes[0]
+        if strong_zones:
+            for price, count in strong_zones:
+                ax.axhline(y=price, color='#1565C0', linestyle='-', linewidth=2.0, alpha=0.8)
+                ax.annotate(f'зона {price:.2f} ({count})', xy=(0, price),
+                            xytext=(5, 0), textcoords='offset points',
+                            fontsize=8, color='#1565C0', fontweight='bold',
+                            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+
+        if engine_levels:
+            for price in engine_levels:
+                ax.axhline(y=price, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
+                ax.annotate(f'ур. {price:.2f}', xy=(0, price),
+                            xytext=(5, 0), textcoords='offset points',
+                            fontsize=7, color='red',
+                            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='This figure includes Axes that are not compatible')
+            try:
+                fig.tight_layout()
+            except UserWarning:
+                pass
+
+        canvas = FigureCanvasTkAgg(fig, master=self._chart_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+
+        toolbar = NavigationToolbar2Tk(canvas, self._chart_frame)
+        toolbar.update()
+        toolbar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self._chart_figure = fig
+        self._chart_canvas = canvas
+        self._chart_toolbar = toolbar
+        self._chart_ax = ax
+
+    def add_post_backtest_lines(self, engine_levels=None, sl_price=None, tp_price=None):
+        if self._chart_ax is None:
+            return
+        ax = self._chart_ax
+        for line in self._chart_lines:
+            try:
+                line.remove()
+            except Exception:
+                pass
+        self._chart_lines.clear()
+
+        if engine_levels:
+            for price in engine_levels:
+                line = ax.axhline(y=price, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
+                self._chart_lines.append(line)
+                ann = ax.annotate(f'ур. {price:.2f}', xy=(0, price),
+                                  xytext=(5, 0), textcoords='offset points',
+                                  fontsize=7, color='red',
+                                  bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+                self._chart_lines.append(ann)
+
+        if sl_price is not None:
+            line = ax.axhline(y=sl_price, color='orange', linestyle=':', linewidth=1.5, alpha=0.9)
+            self._chart_lines.append(line)
+            ann = ax.annotate(f'SL {sl_price:.2f}', xy=(0, sl_price),
+                              xytext=(5, 0), textcoords='offset points',
+                              fontsize=8, color='orange', fontweight='bold',
+                              bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+            self._chart_lines.append(ann)
+
+        if tp_price is not None:
+            line = ax.axhline(y=tp_price, color='green', linestyle=':', linewidth=1.5, alpha=0.9)
+            self._chart_lines.append(line)
+            ann = ax.annotate(f'TP {tp_price:.2f}', xy=(0, tp_price),
+                              xytext=(5, 0), textcoords='offset points',
+                              fontsize=8, color='green', fontweight='bold',
+                              bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+            self._chart_lines.append(ann)
+
+        if self._chart_canvas:
+            self._chart_canvas.draw_idle()
+        self._chart_ax = ax
+
+    def clear_chart(self):
+        for w in self._chart_frame.winfo_children():
+            w.destroy()
+        self._chart_placeholder = ttk.Label(
+            self._chart_frame, text="Загрузите данные для отображения графика",
+            anchor='center', font=('', 11))
+        self._chart_placeholder.pack(fill=tk.BOTH, expand=1)
+        self._chart_figure = None
+        self._chart_canvas = None
+        self._chart_toolbar = None
+        self._chart_ax = None
+        self._chart_lines = []
 
     def add_backtest_result(self, text):
         self.backtest_text.delete(1.0, tk.END)

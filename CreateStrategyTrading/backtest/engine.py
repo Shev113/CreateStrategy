@@ -7,7 +7,7 @@ from collections import Counter
 
 import pandas as pd
 
-from strategy.levels import find_horizontal_levels, round_to_tolerance
+from strategy.levels import round_to_tolerance
 from strategy.config import get_strategy_func
 from strategy.indicators import calc_atr
 from .metrics import calc_metrics
@@ -43,6 +43,7 @@ class BacktestEngine:
         self.strategy = strategy
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
+        self._final_levels = []
 
     def _get_signal(self, candles, idx, levels, atr):
         if self._signal_func is None:
@@ -211,8 +212,14 @@ class BacktestEngine:
                 'tp_price': round(position['tp'], 2)
             })
 
+        self._final_levels = [p for p, c in
+                              sorted(price_counter.items(), key=lambda x: -x[1])[:10]]
         metrics = calc_metrics(trades, self.initial_capital, self.capital)
         return trades, metrics
+
+    @property
+    def last_levels(self):
+        return getattr(self, '_final_levels', [])
 
 
 def export_results(trades, metrics, symbol):
