@@ -29,9 +29,12 @@ def _add_copy_menu(text_widget):
 
 class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
-                 get_moex_tickers, on_backtest):
+                 get_moex_tickers, on_backtest, on_diary=None,
+                 on_show_settings=None):
         self.root = parent.winfo_toplevel()
         self.parent = parent
+        self._last_signal = None
+        self._last_params = None
 
         all_tickers = get_moex_tickers()
 
@@ -91,10 +94,25 @@ class StockAppVisual:
         self._param_entries = {}
         self._rebuild_params()
 
+        btn_row = ttk.Frame(parent)
+        btn_row.grid(row=9, column=0, columnspan=2, pady=2)
+
         self.save_settings_btn = ttk.Button(
-            parent, text="Сохранить настройки",
+            btn_row, text="Сохранить настройки",
             command=lambda: self._save_current_settings())
-        self.save_settings_btn.grid(row=9, column=0, columnspan=2, pady=2)
+        self.save_settings_btn.pack(side=tk.LEFT, padx=5)
+
+        self.diary_btn = ttk.Button(
+            btn_row, text="В дневник",
+            command=lambda: on_diary() if on_diary else None)
+        self.diary_btn.pack(side=tk.LEFT, padx=5)
+        self.diary_btn.config(state='disabled')
+
+        self._on_show_settings = on_show_settings
+        self._settings_btn = ttk.Button(
+            btn_row, text="Индивид. настройки",
+            command=lambda: self._show_settings())
+        self._settings_btn.pack(side=tk.LEFT, padx=5)
 
         self.backtest_button = ttk.Button(
             parent, text="2. Запустить Backtest", command=on_backtest)
@@ -127,6 +145,45 @@ class StockAppVisual:
             "=========================================="
         ]
         self.add_backtest_result('\n'.join(lines))
+
+    def _show_settings(self):
+        if self._on_show_settings:
+            self._on_show_settings()
+
+    def set_last_analysis(self, signal, params):
+        self._last_signal = signal
+        self._last_params = params
+        if signal and signal.get('action') in ('BUY', 'SELL'):
+            self.diary_btn.config(state='normal')
+        else:
+            self.diary_btn.config(state='disabled')
+
+    def display_recommendation(self, signal):
+        action = signal.get('action', 'NONE')
+        if action == 'NONE':
+            self.backtest_text.insert(tk.END, '\n\n========== РЕКОМЕНДАЦИЯ ==========\nНет сигнала\n====================================')
+            return
+
+        symbols = {'BUY': '⬆', 'SELL': '⬇', 'WAIT': '➡'}
+        labels = {'BUY': 'ПОКУПКА', 'SELL': 'ПРОДАЖА', 'WAIT': 'ОЖИДАНИЕ'}
+        level = signal.get('level', 0)
+        stars = signal.get('strength', {}).get('stars', '')
+        last_price = signal.get('last_price', 0)
+        atr_val = signal.get('atr', 0)
+        dist = signal.get('distance', 0) * atr_val if atr_val else 0
+        sl = signal.get('sl_price', 0)
+        tp = signal.get('tp_price', 0)
+
+        lines = [
+            '',
+            '========== РЕКОМЕНДАЦИЯ ==========',
+            f'{symbols.get(action, "➡")} {labels.get(action, action)} от {level:.2f}',
+            f'Уровень: {level:.2f} {stars}  (дист. {dist:.2f})',
+            f'Посл. цена: {last_price:.2f}',
+            f'SL: {sl:.2f} | TP: {tp:.2f}',
+            '===================================='
+        ]
+        self.backtest_text.insert(tk.END, '\n'.join(lines))
 
     def _get_strategy_id(self):
         display = self._strategy_combo.get()

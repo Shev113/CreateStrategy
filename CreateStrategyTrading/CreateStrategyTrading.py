@@ -11,8 +11,10 @@ import pandas as pd
 import requests
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox as mb
 
 from backtest.engine import BacktestEngine, export_results, candles_to_df
+from screening.levels_strength import calculate_level_strength, get_best_level_signal
 from screening.reporter import generate_report
 from screening.scanner import Scanner
 from screening.sectors import SectorDB
@@ -124,7 +126,9 @@ class CreateStrategyApp:
 
         self.app = StockAppVisual(
             tab_analysis, self.on_select, self.on_export_button,
-            self.get_moex_tickers, self.on_backtest
+            self.get_moex_tickers, self.on_backtest,
+            on_diary=self.on_add_to_diary_analysis,
+            on_show_settings=self.on_show_ticker_settings
         )
 
         self.scanner_ui = ScannerUI(
@@ -279,15 +283,44 @@ class CreateStrategyApp:
             selected_stock = self.app.stock_combobox.get()
             csv_path, json_path = export_results(trades, metrics, selected_stock)
 
+            signal = None
+            stock_data = self.state.stock_data
+            if trades and stock_data:
+                last_price = float(stock_data[-1][1])
+                df = candles_to_df(stock_data)
+                if df is not None and len(df) > 0:
+                    atr_series = calc_atr(df, params.get('atr_period', 14))
+                    if not atr_series.empty and not atr_series.isna().iloc[-1]:
+                        atr_value = atr_series.iloc[-1]
+                        last_candles = params.get('last_candles', 10)
+                        levels_strength = calculate_level_strength(trades, last_candles=last_candles)
+                        if levels_strength and last_price and atr_value:
+                            atr_sl_val = params.get('atr_sl', 1.0)
+                            atr_tp_val = params.get('atr_tp', 2.0)
+                            signal = get_best_level_signal(
+                                levels_strength, last_price, atr_value,
+                                atr_sl=atr_sl_val, atr_tp=atr_tp_val)
+                            if signal and signal['action'] == 'NONE':
+                                signal = get_best_level_signal(
+                                    levels_strength, last_price, atr_value,
+                                    threshold_mult=1.0, atr_sl=atr_sl_val, atr_tp=atr_tp_val)
+                            if signal:
+                                signal['last_price'] = last_price
+                                signal['atr'] = atr_value
+
             self.root.after(0, lambda: self._on_backtest_complete(
-                trades, metrics, csv_path, json_path, selected_stock))
+                trades, metrics, csv_path, json_path, selected_stock, signal, params))
         except Exception as e:
             self.root.after(0, lambda: self._on_backtest_error(str(e)))
 
-    def _on_backtest_complete(self, trades, metrics, csv_path, json_path, selected_stock):
+    def _on_backtest_complete(self, trades, metrics, csv_path, json_path,
+                              selected_stock, signal=None, params=None):
         self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         self.app.display_backtest_results(metrics)
         self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
+        if signal:
+            self.app.display_recommendation(signal)
+            self.app.set_last_analysis(signal, params)
 
     def _on_backtest_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")
@@ -519,17 +552,67 @@ class CreateStrategyApp:
             canvas.unbind_all('<MouseWheel>'), win.destroy()
         ))
 
+    def on_add_to_diary_analysis(self) -> None:
+        """Добавить текущий сигнал из вкладки Анализа в дневник"""
+        signal = self.app._last_signal
+        params = self.app._last_params
+        if not signal or signal.get('action') not in ('BUY', 'SELL'):
+            mb.showinfo('В дневник', 'Нет активного сигнала BUY/SELL.')
+            return
+        if not params:
+            mb.showinfo('В дневник', 'Нет параметров. Запустите backtest.')
+            return
+
+        ticker = self.app.stock_combobox.get()
+        if not ticker:
+            return
+
+        confirm = mb.askyesno(
+            'Подтверждение',
+            f'Добавить {ticker} в торговый дневник?\n\n'
+            f'Сигнал: {signal["action"]}\n'
+            f'Цена входа: {signal.get("last_price", 0):.2f}\n'
+            f'SL: {signal.get("sl_price", 0):.2f} | TP: {signal.get("tp_price", 0):.2f}'
+        )
+        if not confirm:
+            return
+
+        capital = params.get('capital', 1_000_000)
+        risk_per_trade = params.get('risk_per_trade', 0.02)
+        entry_price = signal.get('last_price') or signal.get('level', 0)
+        sl_price = signal.get('sl_price', 0)
+        tp_price = signal.get('tp_price', 0)
+        qty = calc_position_qty(capital, risk_per_trade, entry_price, sl_price)
+        volume = calc_position_volume(capital, risk_per_trade, entry_price, sl_price)
+        side_map = {'BUY': 'LONG', 'SELL': 'SHORT'}
+
+        entry = DiaryEntry(
+            date=datetime.now().strftime('%Y-%m-%d %H:%M'),
+            ticker=ticker,
+            side=side_map.get(signal['action'], signal['action']),
+            entry_price=entry_price,
+            sl_price=sl_price,
+            tp_price=tp_price,
+            volume=volume,
+            qty=qty,
+            status='open'
+        )
+        self.diary_storage.add_entries([entry])
+        if self.diary_ui:
+            self.diary_ui.refresh()
+        mb.showinfo('В дневник', f'{ticker} добавлен в дневник.')
+
     def on_show_ticker_settings(self) -> None:
         """Показать индивидуальные настройки для каждой бумаги"""
         path = os.path.join('results', 'ticker_settings.json')
         if not os.path.exists(path):
-            tk.messagebox.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
+            mb.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
             return
         import json
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if not data:
-            tk.messagebox.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
+            mb.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
             return
 
         from strategy.config import get_strategy_names
