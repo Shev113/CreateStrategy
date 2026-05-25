@@ -73,6 +73,7 @@ class BacktestEngine:
 
         trades = []
         position = None
+        pending_signal = None
 
         for i in range(self.atr_period, len(df)):
             candle = candles_list[i - 1]
@@ -85,40 +86,40 @@ class BacktestEngine:
             current_candle = candles_list[i]
 
             levels = [p for p, c in price_counter.items() if c >= self.min_hits]
-            if not levels:
-                continue
-
             atr = atr_series.iloc[i]
-            if pd.isna(atr):
-                continue
+            has_atr = not pd.isna(atr)
 
-            if position is None:
+            # Execute pending signal: enter at open of current candle
+            if pending_signal is not None and position is None:
+                signal = pending_signal
+                pending_signal = None
+                open_price = float(current_candle[0])
+                sl = signal['sl_price']
+                sl_dist = abs(open_price - sl) / open_price if open_price != 0 else 0.01
+                if sl_dist > 0 and has_atr:
+                    risk_amount = self.capital * self.risk_per_trade
+                    qty = risk_amount / (sl_dist * open_price)
+                    direction = 1 if signal['side'] == 'BUY' else -1
+                    tp = open_price + direction * self.atr_tp * atr
+                    position = {
+                        'side': signal['side'],
+                        'entry_price': open_price,
+                        'sl': sl,
+                        'tp': round(tp, 2),
+                        'qty': qty,
+                        'entry_idx': i,
+                        'entry_date': df.index[i],
+                        'level': signal['level']
+                    }
+
+            # Signal detection: check current candle, schedule for next
+            if position is None and pending_signal is None and levels and has_atr:
                 signal = self._get_signal(candles_list, i, levels, atr)
-                if signal:
-                    close = float(current_candle[1])
-                    sl = signal['sl_price']
-                    sl_dist = abs(close - sl) / close if close != 0 else 0.01
+                if signal and i + 1 < len(df):
+                    pending_signal = signal
 
-                    if sl_dist > 0:
-                        risk_amount = self.capital * self.risk_per_trade
-                        qty = risk_amount / (sl_dist * close)
-
-                        tp = signal['tp_price']
-                        direction = 1 if signal['side'] == 'BUY' else -1
-                        tp = close + direction * self.atr_tp * atr
-
-                        position = {
-                            'side': signal['side'],
-                            'entry_price': close,
-                            'sl': sl,
-                            'tp': round(tp, 2),
-                            'qty': qty,
-                            'entry_idx': i,
-                            'entry_date': df.index[i],
-                            'level': signal['level']
-                        }
-
-            else:
+            # Position monitoring
+            if position is not None:
                 c = current_candle
                 o, cl, h, l = float(c[0]), float(c[1]), float(
                     c[2]), float(c[3])
