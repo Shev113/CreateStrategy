@@ -17,7 +17,7 @@ try:
 except ImportError:
     HAS_SV_TTK = False
 
-from backtest.engine import BacktestEngine, export_results, candles_to_df
+from backtest.engine import BacktestEngine, export_results as _export_results, candles_to_df
 from screening.levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal
 from screening.reporter import generate_report
 from screening.scanner import Scanner
@@ -70,6 +70,9 @@ class CreateStrategyApp:
         self._last_scan_results = []
         self._last_scan_params = {}
         self._last_capital = 1_000_000
+        self._last_trades = None
+        self._last_metrics = None
+        self._last_export_stock = None
         self._favorites = load_favorites()
         self.diary_storage = DiaryStorage()
         migrate_ticker_settings(os.path.join('results', 'ticker_settings.json'))
@@ -156,6 +159,7 @@ class CreateStrategyApp:
             self.get_moex_tickers, self.on_backtest,
             on_diary=self.on_add_to_diary_analysis,
             on_show_settings=self.on_show_ticker_settings,
+            on_save_results=self._on_save_results,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite
         )
@@ -382,7 +386,9 @@ class CreateStrategyApp:
             engine = BacktestEngine(**params)
             trades, metrics = engine.run(self.state.stock_data)
             selected_stock = self.app.stock_combobox.get()
-            csv_path, json_path = export_results(trades, metrics, selected_stock)
+            self._last_trades = trades
+            self._last_metrics = metrics
+            self._last_export_stock = selected_stock
 
             signal = None
             stock_data = self.state.stock_data
@@ -410,15 +416,15 @@ class CreateStrategyApp:
                                 signal['atr'] = atr_value
 
             self.root.after(0, lambda e=engine: self._on_backtest_complete(
-                trades, metrics, csv_path, json_path, selected_stock, signal, params, engine=e))
+                trades, metrics, selected_stock, signal, params, engine=e))
         except Exception as e:
             self.root.after(0, lambda: self._on_backtest_error(str(e)))
 
-    def _on_backtest_complete(self, trades, metrics, csv_path, json_path,
+    def _on_backtest_complete(self, trades, metrics,
                               selected_stock, signal=None, params=None, engine=None):
         self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         self.app.display_backtest_results(metrics)
-        self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
+        self.app.enable_save_results_button()
         if params and 'capital' in params:
             self._last_capital = params['capital']
         if signal:
@@ -439,6 +445,14 @@ class CreateStrategyApp:
         self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")
         self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         logging.exception("Backtest error")
+
+    def _on_save_results(self):
+        if not self._last_trades and not self._last_metrics:
+            return
+        stock = self._last_export_stock or self.app.stock_combobox.get()
+        csv_path, json_path = _export_results(
+            self._last_trades or [], self._last_metrics or {}, stock)
+        self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
 
     def on_backtest(self) -> None:
         """Запуск backtesting стратегии (асинхронно)"""

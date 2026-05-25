@@ -34,7 +34,8 @@ def _add_copy_menu(text_widget):
 class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
                  get_moex_tickers, on_backtest, on_diary=None,
-                 on_show_settings=None, favorites=None, on_toggle_favorite=None):
+                 on_show_settings=None, on_save_results=None,
+                 favorites=None, on_toggle_favorite=None):
         self.root = parent.winfo_toplevel()
         self._last_signal = None
         self._last_params = None
@@ -161,6 +162,12 @@ class StockAppVisual:
             command=lambda: self._show_settings())
         self._settings_btn.pack(side=tk.LEFT, padx=5)
 
+        self._save_results_btn = ttk.Button(
+            btn_row, text="Сохранить результаты",
+            command=lambda: on_save_results() if on_save_results else None)
+        self._save_results_btn.pack(side=tk.LEFT, padx=5)
+        self._save_results_btn.config(state='disabled')
+
         self.backtest_button = ttk.Button(
             parent, text="2. Запустить Backtest", command=on_backtest)
         self.backtest_button.grid(row=10, column=0, columnspan=2, pady=5)
@@ -168,6 +175,12 @@ class StockAppVisual:
         self.backtest_text = tk.Text(parent, height=8, width=55)
         self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
+
+    def enable_save_results_button(self):
+        self._save_results_btn.config(state='normal')
+
+    def disable_save_results_button(self):
+        self._save_results_btn.config(state='disabled')
 
     def _on_ticker_keyrelease(self, event):
         if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Escape'):
