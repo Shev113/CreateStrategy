@@ -7,13 +7,10 @@ import threading
 from datetime import datetime, timedelta
 from collections import Counter
 
-import matplotlib.pyplot as plt
-import mplfinance as mpf
 import pandas as pd
 import requests
 import tkinter as tk
 from tkinter import ttk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 from backtest.engine import BacktestEngine, export_results, candles_to_df
 from screening.reporter import generate_report
@@ -126,14 +123,15 @@ class CreateStrategyApp:
         notebook.add(tab_diary, text='Дневник сделок')
 
         self.app = StockAppVisual(
-            tab_analysis, self.on_select, self.on_plot_button, self.on_export_button,
-            self.step, self.get_moex_tickers, self.on_backtest
+            tab_analysis, self.on_select, self.on_export_button,
+            self.get_moex_tickers, self.on_backtest
         )
 
         self.scanner_ui = ScannerUI(
             tab_scanner, sectors=self.sector_db.get_all_sectors(),
             on_scan=self.on_scanner, on_legend=self.on_show_legend,
-            on_excel=self.on_export_excel, on_diary=self.on_add_to_diary
+            on_excel=self.on_export_excel, on_diary=self.on_add_to_diary,
+            on_show_settings=self.on_show_ticker_settings
         )
 
         self.diary_ui = DiaryUI(
@@ -195,12 +193,14 @@ class CreateStrategyApp:
         self.state.stock_data = stock_data
         self.state.df = self.candles_to_df_custom(stock_data)
         self.app.result_text.delete(1.0, tk.END)
-        min_repeats = int(self.app.min_repeats_entry.get()) if self.app.min_repeats_entry.get() else DEFAULT_MIN_REPEATS
-        if min_repeats < 1:
-            min_repeats = 1
+
+        params = self.app.get_backtest_params()
+        min_hits = params.get('min_hits', DEFAULT_MIN_REPEATS) if params else DEFAULT_MIN_REPEATS
+        if min_hits < 1:
+            min_hits = 1
 
         self.state.horizontal_lines = find_horizontal_levels(
-            stock_data, min_hits=min_repeats)
+            stock_data, min_hits=min_hits)
 
         if self.state.df is not None and len(stock_data) > 0:
             avg_price = sum(float(c[3]) for c in stock_data if c and len(c) >= 4) / len(stock_data)
@@ -259,50 +259,6 @@ class CreateStrategyApp:
         self.app.result_text.insert(tk.END, f"Ошибка: {error_msg}")
         self.app.get_data_button.config(state='normal', text='1. Получить данные')
 
-    def plot_candles(self, candles: list) -> tuple:
-        """Построение свечного графика"""
-        df = self.candles_to_df_custom(candles)
-        if df is None or df.empty:
-            return None, None
-        fig, axlist = mpf.plot(df, type='candle', style='yahoo', volume=True, returnfig=True)
-        return fig, axlist[0]
-
-    def parse_prices_from_result_text(self, text: str) -> list[float]:
-        """Извлечение цен из текстового поля результатов"""
-        prices = []
-        for line in text.strip().split("\n"):
-            try:
-                if "Price:" in line and "Count:" in line:
-                    price_str = line.split("Price:")[1].split(",")[0].strip()
-                    prices.append(float(price_str))
-            except (ValueError, IndexError):
-                continue
-        return prices
-
-    def on_plot_button(self) -> None:
-        """Построение графика с горизонтальными уровнями"""
-        if self.state.stock_data is None:
-            print("Ошибка: данные по акции не загружены")
-            return
-        selected_stock = self.app.stock_combobox.get()
-        if isinstance(self.state.stock_data, list):
-            fig, ax = self.plot_candles(self.state.stock_data)
-            if fig is None:
-                return
-
-            lines_text = self.app.result_text.get("1.0", tk.END)
-            for price in self.parse_prices_from_result_text(lines_text):
-                ax.axhline(y=price, color='r', linestyle='--', linewidth=1, alpha=0.7)
-
-            plot_window = tk.Toplevel(self.app.root)
-            plot_window.title(f"График {selected_stock}")
-            canvas = FigureCanvasTkAgg(fig, master=plot_window)
-            canvas.draw()
-            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-            toolbar = NavigationToolbar2Tk(canvas, plot_window)
-            toolbar.update()
-            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
     def on_export_button(self) -> None:
         """Экспорт данных в текстовый файл"""
         if self.state.stock_data is None:
@@ -316,75 +272,9 @@ class CreateStrategyApp:
             else:
                 print("Failed to export data.")
 
-    def find_nearest_horizontal_line(self, current_price: float) -> float | None:
-        """Поиск ближайшего горизонтального уровня"""
-        if not self.state.horizontal_lines:
-            return None
-        return min(self.state.horizontal_lines, key=lambda x: abs(x - current_price))
-
-    def step(self) -> None:
-        """Шаг по свечам с отображением ближайшего уровня"""
-        if not self.state.stock_data:
-            print("Ошибка: данные не загружены")
-            return
-        if self.state.current_step >= len(self.state.stock_data):
-            print("Шаги закончились")
-            return
-        current_candle = self.state.stock_data[self.state.current_step]
-        if current_candle is None or len(current_candle) < 4:
-            self.state.current_step += 1
-            return
-        current_price = float(current_candle[1])
-        nearest_line = self.find_nearest_horizontal_line(current_price)
-        if nearest_line is not None and self.state.df is not None:
-            fig, axlist = mpf.plot(self.state.df, type='candle', style='yahoo',
-                                   volume=True, returnfig=True)
-            axlist[0].axhline(y=nearest_line, color='r', linestyle='--', linewidth=2)
-            for widget in self.app.canvas.get_tk_widget().winfo_children():
-                widget.destroy()
-            self.app.canvas.figure = fig
-            self.app.canvas.draw()
-        self.state.current_step += 1
-
-    def plot_with_trades(self, stock_data: list, trades: list) -> None:
-        """Визуализация сделок на графике"""
-        df = self.candles_to_df_custom(stock_data)
-        if df is None or df.empty:
-            return
-        fig, axlist = mpf.plot(df, type='candle', style='yahoo',
-                               volume=True, returnfig=True)
-        ax = axlist[0]
-        for trade in trades:
-            entry_idx = trade['entry_idx']
-            exit_idx = trade['exit_idx']
-            ep = trade['entry_price']
-            xp = trade['exit_price']
-            ec, xc = ('lime', 'gold') if trade['pnl'] > 0 else ('red', 'orange')
-            marker_entry = '^' if trade['side'] == 'BUY' else 'v'
-            marker_exit = 'v' if trade['side'] == 'BUY' else '^'
-            ax.scatter(entry_idx, ep, marker=marker_entry, color=ec, s=180,
-                       zorder=5, edgecolors='black', linewidths=0.5)
-            ax.scatter(exit_idx, xp, marker=marker_exit, color=xc, s=180,
-                       zorder=5, edgecolors='black', linewidths=0.5)
-
-        selected_stock = self.app.stock_combobox.get()
-        plot_window = tk.Toplevel(self.app.root)
-        plot_window.title(f"Backtest - {selected_stock}")
-        plot_window.geometry("1200x700")
-        canvas = FigureCanvasTkAgg(fig, master=plot_window)
-        canvas.draw()
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-        toolbar = NavigationToolbar2Tk(canvas, plot_window)
-        toolbar.update()
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-    def _run_backtest_task(self, atr_sl, atr_tp, risk_pct, min_hits):
+    def _run_backtest_task(self, params):
         try:
-            engine = BacktestEngine(
-                capital=INITIAL_CAPITAL, risk_per_trade=risk_pct / 100,
-                atr_sl=atr_sl, atr_tp=atr_tp, min_hits=min_hits,
-                strategy='bounce')
-
+            engine = BacktestEngine(**params)
             trades, metrics = engine.run(self.state.stock_data)
             selected_stock = self.app.stock_combobox.get()
             csv_path, json_path = export_results(trades, metrics, selected_stock)
@@ -395,15 +285,13 @@ class CreateStrategyApp:
             self.root.after(0, lambda: self._on_backtest_error(str(e)))
 
     def _on_backtest_complete(self, trades, metrics, csv_path, json_path, selected_stock):
-        self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+        self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         self.app.display_backtest_results(metrics)
         self.app.backtest_text.insert(tk.END, f"\n\nФайлы:\n  {csv_path}\n  {json_path}")
-        if self.app.show_trades_var.get():
-            self.plot_with_trades(self.state.stock_data, trades)
 
     def _on_backtest_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")
-        self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+        self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
         logging.exception("Backtest error")
 
     def on_backtest(self) -> None:
@@ -414,31 +302,20 @@ class CreateStrategyApp:
         if len(self.state.stock_data) < MIN_CANDLES_FOR_BACKTEST:
             self.app.add_backtest_result("Ошибка: слишком мало данных (нужно >= 30 свечей)")
             return
-        try:
-            atr_sl = float(self.app.atr_sl_entry.get())
-            atr_tp = float(self.app.atr_tp_entry.get())
-            risk_pct = float(self.app.risk_entry.get())
-            min_hits = int(self.app.min_repeats_entry.get()) if self.app.min_repeats_entry.get() else DEFAULT_MIN_REPEATS
-            if atr_sl <= 0 or atr_tp <= 0:
-                self.app.add_backtest_result("Ошибка: ATR множители должны быть > 0")
-                return
-            if risk_pct <= 0 or risk_pct > 100:
-                self.app.add_backtest_result("Ошибка: риск должен быть 0-100%")
-                return
-            if min_hits < 1:
-                min_hits = 1
 
-            self.app.backtest_button.config(state='disabled', text='Backtest запущен...')
+        params = self.app.get_backtest_params()
+        if params is None:
+            self.app.add_backtest_result("Ошибка: проверьте числовые параметры.")
+            return
 
-            t = threading.Thread(
-                target=self._run_backtest_task,
-                args=(atr_sl, atr_tp, risk_pct, min_hits),
-                daemon=True
-            )
-            t.start()
-        except ValueError:
-            self.app.add_backtest_result("Ошибка: проверьте введённые числа")
-            self.app.backtest_button.config(state='normal', text='3. Запустить Backtest')
+        self.app.backtest_button.config(state='disabled', text='Backtest запущен...')
+
+        t = threading.Thread(
+            target=self._run_backtest_task,
+            args=(params,),
+            daemon=True
+        )
+        t.start()
 
     def on_scanner(self) -> None:
         """Запуск сканера по секторам"""
@@ -463,15 +340,20 @@ class CreateStrategyApp:
         def run_scan():
             try:
                 scanner = Scanner(sector_db=self.sector_db, fetch_fn=self.get_stock_data)
+                ticker_settings_path = os.path.join('results', 'ticker_settings.json')
                 results = scanner.scan(
                     sectors=selected,
                     date_from=date_from,
                     date_to=date_to,
                     backtest_params=params,
+                    ticker_settings_path=ticker_settings_path,
                     progress_fn=lambda c, t, tick, sec: self.scanner_ui.update_progress(c, t, tick, sec)
                 )
                 self._last_scan_results = results
+                n_custom = len(scanner.ticker_overrides_used)
                 report = generate_report(results, top_n=5, params=params)
+                if n_custom:
+                    report += f"\n  Бумаг с индивид. настройками: {n_custom}"
                 self.root.after(0, lambda: self.scanner_ui.show_report(report))
             except Exception as e:
                 self.root.after(0, lambda: self.scanner_ui.show_report(f"Ошибка: {str(e)}"))
@@ -636,6 +518,43 @@ class CreateStrategyApp:
         win.protocol('WM_DELETE_WINDOW', lambda: (
             canvas.unbind_all('<MouseWheel>'), win.destroy()
         ))
+
+    def on_show_ticker_settings(self) -> None:
+        """Показать индивидуальные настройки для каждой бумаги"""
+        path = os.path.join('results', 'ticker_settings.json')
+        if not os.path.exists(path):
+            tk.messagebox.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
+            return
+        import json
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not data:
+            tk.messagebox.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
+            return
+
+        from strategy.config import get_strategy_names
+        name_map = dict(get_strategy_names())
+
+        win = tk.Toplevel(self.root)
+        win.title('Индивидуальные настройки бумаг')
+        win.geometry('700x500')
+        text = tk.Text(win, wrap=tk.NONE, font=('Consolas', 10))
+        text.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+        scroll_y = tk.Scrollbar(win, orient='vertical', command=text.yview)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        text.configure(yscrollcommand=scroll_y.set)
+
+        content = []
+        for ticker in sorted(data):
+            entry = data[ticker]
+            sid = entry.get('strategy', '?')
+            sname = name_map.get(sid, sid)
+            content.append(f' {ticker}  ({sname})')
+            for k, v in entry.get('params', {}).items():
+                content.append(f'   {k}: {v}')
+            content.append('')
+        text.insert('1.0', '\n'.join(content))
+        text.configure(state='disabled')
 
     def on_check_positions(self) -> None:
         """Проверить открытые позиции — закрыть по SL/TP"""

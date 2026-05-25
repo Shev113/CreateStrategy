@@ -4,10 +4,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-import mplfinance as mpf
-import pandas as pd
-import matplotlib.pyplot as plt
+
 
 
 def _add_copy_menu(text_widget):
@@ -31,8 +28,8 @@ def _add_copy_menu(text_widget):
 
 
 class StockAppVisual:
-    def __init__(self, parent, on_select, on_plot_button, on_export_button,
-                 step, get_moex_tickers, on_backtest):
+    def __init__(self, parent, on_select, on_export_button,
+                 get_moex_tickers, on_backtest):
         self.root = parent.winfo_toplevel()
         self.parent = parent
 
@@ -44,6 +41,7 @@ class StockAppVisual:
         self.stock_combobox.grid(row=0, column=1, padx=5, pady=5, sticky='w')
         if all_tickers:
             self.stock_combobox.set(all_tickers[0])
+        self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: self._load_ticker_settings())
 
         label_start = ttk.Label(parent, text="Начальная дата (гггг-мм-дд):")
         label_start.grid(row=1, column=0, padx=5, pady=5, sticky='e')
@@ -57,79 +55,54 @@ class StockAppVisual:
         self.end_date_entry.grid(row=2, column=1, padx=5, pady=5, sticky='w')
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
-        self.min_repeats_label = tk.Label(parent, text="Мин. повторов цены:")
-        self.min_repeats_label.grid(row=3, column=0, padx=5, pady=2, sticky='e')
-        self.min_repeats_entry = tk.Entry(parent, width=28)
-        self.min_repeats_entry.grid(row=3, column=1, padx=5, pady=2, sticky='w')
-        self.min_repeats_entry.insert(0, "5")
-
         self.result_text = tk.Text(parent, height=12, width=55)
-        self.result_text.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+        self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
         _add_copy_menu(self.result_text)
 
         self.get_data_button = ttk.Button(
             parent, text="1. Получить данные", command=on_select)
-        self.get_data_button.grid(row=5, column=0, columnspan=2, pady=2)
-
-        plot_button = ttk.Button(
-            parent, text="2. Построить график", command=on_plot_button)
-        plot_button.grid(row=6, column=0, columnspan=2, pady=2)
+        self.get_data_button.grid(row=4, column=0, columnspan=2, pady=2)
 
         export_button = ttk.Button(
             parent, text="Экспорт данных", command=on_export_button)
-        export_button.grid(row=7, column=0, columnspan=2, pady=2)
+        export_button.grid(row=5, column=0, columnspan=2, pady=2)
+
+        # Стратегия
+        from strategy.config import get_strategy_names
+        self._strategy_names = get_strategy_names()
+        self._strategy_id_map = {name: sid for sid, name in self._strategy_names}
 
         ttk.Separator(parent, orient='horizontal').grid(
-            row=8, column=0, columnspan=2, sticky='ew', pady=5)
+            row=6, column=0, columnspan=2, sticky='ew', pady=5)
 
-        btns_frame = ttk.Frame(parent)
-        btns_frame.grid(row=9, column=0, columnspan=2, pady=2)
+        ttk.Label(parent, text="Стратегия:",
+                  font=('', 10, 'bold')).grid(row=7, column=0, padx=5, pady=(5, 0), sticky='w')
+        self._strategy_combo = ttk.Combobox(parent, state='readonly', width=35)
+        display_names = [name for sid, name in self._strategy_names]
+        self._strategy_combo['values'] = display_names
+        if display_names:
+            self._strategy_combo.current(0)
+        self._strategy_combo.grid(row=7, column=1, padx=5, pady=(5, 0), sticky='w')
+        self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
 
-        ttk.Label(btns_frame, text="ATR SL:").grid(
-            row=0, column=0, padx=2, sticky='e')
-        self.atr_sl_entry = ttk.Entry(btns_frame, width=6)
-        self.atr_sl_entry.grid(row=0, column=1, padx=2)
-        self.atr_sl_entry.insert(0, "1.0")
+        self._params_frame = ttk.Frame(parent)
+        self._params_frame.grid(row=8, column=0, columnspan=2, sticky='ew', padx=5, pady=2)
 
-        ttk.Label(btns_frame, text="ATR TP:").grid(
-            row=0, column=2, padx=2, sticky='e')
-        self.atr_tp_entry = ttk.Entry(btns_frame, width=6)
-        self.atr_tp_entry.grid(row=0, column=3, padx=2)
-        self.atr_tp_entry.insert(0, "2.0")
+        self._param_entries = {}
+        self._rebuild_params()
 
-        ttk.Label(btns_frame, text="Риск %:").grid(
-            row=0, column=4, padx=2, sticky='e')
-        self.risk_entry = ttk.Entry(btns_frame, width=6)
-        self.risk_entry.grid(row=0, column=5, padx=2)
-        self.risk_entry.insert(0, "2.0")
-
-        self.show_trades_var = tk.BooleanVar(value=True)
-        self.show_trades_cb = tk.Checkbutton(
-            parent, text="Показать сделки на графике",
-            variable=self.show_trades_var)
-        self.show_trades_cb.grid(row=10, column=0, columnspan=2, pady=2)
+        self.save_settings_btn = ttk.Button(
+            parent, text="Сохранить настройки",
+            command=lambda: self._save_current_settings())
+        self.save_settings_btn.grid(row=9, column=0, columnspan=2, pady=2)
 
         self.backtest_button = ttk.Button(
-            parent, text="3. Запустить Backtest", command=on_backtest)
-        self.backtest_button.grid(row=11, column=0, columnspan=2, pady=5)
+            parent, text="2. Запустить Backtest", command=on_backtest)
+        self.backtest_button.grid(row=10, column=0, columnspan=2, pady=5)
 
         self.backtest_text = tk.Text(parent, height=14, width=55)
-        self.backtest_text.grid(row=12, column=0, columnspan=2, padx=5, pady=5)
+        self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5)
         _add_copy_menu(self.backtest_text)
-
-        graph_frame = ttk.Frame(parent)
-        graph_frame.grid(row=0, column=2, rowspan=10, padx=10, pady=10, sticky='n')
-
-        self.canvas = FigureCanvasTkAgg(plt.Figure(), master=graph_frame)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-        toolbar = NavigationToolbar2Tk(self.canvas, graph_frame)
-        toolbar.update()
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-        step_button = ttk.Button(graph_frame, text="Шаг", command=step)
-        step_button.pack(side=tk.BOTTOM)
 
     def add_backtest_result(self, text):
         self.backtest_text.delete(1.0, tk.END)
@@ -155,14 +128,118 @@ class StockAppVisual:
         ]
         self.add_backtest_result('\n'.join(lines))
 
+    def _get_strategy_id(self):
+        display = self._strategy_combo.get()
+        return self._strategy_id_map.get(display, 'bounce')
+
+    def _rebuild_params(self):
+        for w in self._params_frame.winfo_children():
+            w.destroy()
+        self._param_entries.clear()
+
+        from strategy.config import get_strategy_params
+        strategy_id = self._get_strategy_id()
+        params_config = get_strategy_params(strategy_id)
+
+        for i, pcfg in enumerate(params_config):
+            col = (i % 3) * 2
+            row_num = i // 3
+            ttk.Label(self._params_frame, text=pcfg['label'] + ':',
+                      font=('', 8)).grid(row=row_num, column=col, padx=(0, 1), sticky='w')
+            entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
+            entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+            entry.insert(0, str(pcfg['default']))
+            self._param_entries[pcfg['key']] = entry
+
+    def get_backtest_params(self):
+        try:
+            from strategy.config import get_strategy_params
+            strategy_id = self._get_strategy_id()
+            params = {'strategy': strategy_id}
+
+            cfg_list = get_strategy_params(strategy_id)
+            for key, entry in self._param_entries.items():
+                raw = entry.get().strip()
+                cfg = next((c for c in cfg_list if c['key'] == key), None)
+                if cfg and cfg['type'] == int:
+                    params[key] = int(raw)
+                else:
+                    params[key] = float(raw)
+
+            if 'risk_per_trade' in params:
+                params['risk_per_trade'] = params['risk_per_trade'] / 100.0
+            if 'commission' in params:
+                params['commission'] = params['commission'] / 100.0
+
+            return params
+        except (ValueError, TypeError):
+            return None
+
+    def _settings_path(self):
+        os.makedirs('results', exist_ok=True)
+        return 'results/ticker_settings.json'
+
+    def _save_current_settings(self):
+        ticker = self.stock_combobox.get()
+        if not ticker:
+            return
+        import json
+        from strategy.config import get_strategy_params
+        data = {}
+        if os.path.exists(self._settings_path()):
+            with open(self._settings_path(), 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        strategy_id = self._get_strategy_id()
+        data[ticker] = {
+            'strategy': strategy_id,
+            'params': {}
+        }
+        cfg_list = get_strategy_params(strategy_id)
+        for key, entry in self._param_entries.items():
+            raw = entry.get().strip()
+            cfg = next((c for c in cfg_list if c['key'] == key), None)
+            if cfg and cfg['type'] == int:
+                data[ticker]['params'][key] = int(raw)
+            else:
+                data[ticker]['params'][key] = float(raw)
+        with open(self._settings_path(), 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _load_ticker_settings(self):
+        ticker = self.stock_combobox.get()
+        if not ticker:
+            return
+        import json
+        if not os.path.exists(self._settings_path()):
+            return
+        with open(self._settings_path(), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        saved = data.get(ticker)
+        if not saved:
+            return
+
+        strategy_id = saved.get('strategy', 'bounce')
+        display_name = self._strategy_id_map.get(strategy_id)
+        if display_name:
+            self._strategy_combo.set(display_name)
+        self._rebuild_params()
+
+        saved_params = saved.get('params', {})
+        for key, entry in self._param_entries.items():
+            if key in saved_params:
+                entry.delete(0, tk.END)
+                entry.insert(0, str(saved_params[key]))
+
 
 class ScannerUI:
-    def __init__(self, parent, sectors, on_scan, on_legend=None, on_excel=None, on_diary=None):
+    def __init__(self, parent, sectors, on_scan, on_legend=None, on_excel=None, on_diary=None,
+                 on_show_settings=None):
         self.parent = parent
         self.root = parent.winfo_toplevel()
         self._on_legend = on_legend
         self._on_excel = on_excel
         self._on_diary = on_diary
+        self._on_show_settings = on_show_settings
         self._strategy_id_map = {}
         self._strategy_names = []
 
@@ -248,6 +325,11 @@ class ScannerUI:
             command=lambda: self._request_diary())
         self.diary_button.pack(side=tk.LEFT, padx=5)
         self.diary_button.config(state='disabled')
+
+        self.settings_button = ttk.Button(
+            btn_frame, text="Индивид. настройки",
+            command=lambda: self._request_show_settings())
+        self.settings_button.pack(side=tk.LEFT, padx=5)
 
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
@@ -345,6 +427,10 @@ class ScannerUI:
     def _request_diary(self):
         if self._on_diary:
             self._on_diary()
+
+    def _request_show_settings(self):
+        if self._on_show_settings:
+            self._on_show_settings()
 
     def get_selected_sectors(self):
         return [s for s, v in self.sector_vars.items() if v.get()]

@@ -1,4 +1,6 @@
 # scanner.py
+import json
+import os
 import time
 from datetime import datetime
 
@@ -14,8 +16,10 @@ class Scanner:
         self.sector_db = sector_db or SectorDB()
         self.fetch_fn = fetch_fn
         self.results = []
+        self.ticker_overrides_used = set()
 
-    def scan(self, sectors, date_from, date_to, backtest_params, progress_fn=None):
+    def scan(self, sectors, date_from, date_to, backtest_params,
+             ticker_settings_path=None, progress_fn=None):
         """
         Run backtest for all tickers in given sectors.
 
@@ -53,14 +57,45 @@ class Scanner:
                     total_processed += 1
                     continue
 
+                params = dict(backtest_params)
+                has_override = False
+                if ticker_settings_path and os.path.exists(ticker_settings_path):
+                    try:
+                        with open(ticker_settings_path, 'r', encoding='utf-8') as f:
+                            all_settings = json.load(f)
+                        saved = all_settings.get(ticker)
+                        if saved:
+                            has_override = True
+                            if 'strategy' in saved:
+                                params['strategy'] = saved['strategy']
+                            if 'params' in saved:
+                                for k, v in saved['params'].items():
+                                    params[k] = v
+                            if 'risk_per_trade' in params:
+                                params['risk_per_trade'] = params['risk_per_trade'] / 100.0
+                            if 'commission' in params:
+                                params['commission'] = params['commission'] / 100.0
+                    except Exception:
+                        pass
+
+                if has_override:
+                    self.ticker_overrides_used.add(ticker)
+
+                known_params = {'capital', 'risk_per_trade', 'atr_period', 'atr_sl', 'atr_tp',
+                                'min_hits', 'max_hold', 'commission', 'tolerance', 'strategy'}
+                strategy_kwargs = {k: v for k, v in params.items()
+                                   if k not in known_params}
+
                 engine = BacktestEngine(
-                    capital=backtest_params.get('capital', 1_000_000),
-                    risk_per_trade=backtest_params.get('risk_per_trade', 0.02),
-                    atr_sl=backtest_params.get('atr_sl', 1.0),
-                    atr_tp=backtest_params.get('atr_tp', 2.0),
-                    min_hits=backtest_params.get('min_hits', 5),
-                    max_hold=backtest_params.get('max_hold', 20),
-                    commission=backtest_params.get('commission', 0.0005)
+                    strategy=params.get('strategy', 'bounce'),
+                    capital=params.get('capital', 1_000_000),
+                    risk_per_trade=params.get('risk_per_trade', 0.02),
+                    atr_sl=params.get('atr_sl', 1.0),
+                    atr_tp=params.get('atr_tp', 2.0),
+                    min_hits=params.get('min_hits', 5),
+                    max_hold=params.get('max_hold', 20),
+                    commission=params.get('commission', 0.0005),
+                    **strategy_kwargs
                 )
 
                 try:
