@@ -29,6 +29,7 @@ class DiaryEntry:
     exit_date: Optional[str] = None
     exit_reason: Optional[str] = None
     pnl: Optional[float] = None
+    max_hold: int = 20
 
     @property
     def is_open(self):
@@ -170,6 +171,13 @@ class DiaryStorage:
 
                 reason, exit_price_hit = check_candle_hit(
                     e.entry_price, e.sl_price, e.tp_price, e.side, relevant)
+
+                if not reason and len(relevant) > e.max_hold:
+                    timeout_idx = e.max_hold
+                    if timeout_idx < len(relevant):
+                        c = relevant[timeout_idx]
+                        exit_price_hit = float(c[1])
+                        reason = 'TIMEOUT'
 
                 if reason and exit_price_hit is not None:
                     direction = 1 if e.side == 'LONG' else -1

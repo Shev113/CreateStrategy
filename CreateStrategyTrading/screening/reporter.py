@@ -326,5 +326,117 @@ def export_to_excel(all_results, params, filepath):
     return filepath
 
 
+def export_smart_scan_excel(all_results, params, filepath):
+    if not HAS_OPENPYXL:
+        raise ImportError("openpyxl не установлен. pip install openpyxl")
+
+    wb = openpyxl.Workbook()
+
+    # --- Лист 1: Сводка ---
+    ws = wb.active
+    ws.title = "Лучшая стратегия"
+    header_font = Font(bold=True, size=12)
+    title_font = Font(bold=True, size=14)
+    green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+    red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+
+    from strategy.config import get_strategy_names
+    strategy_reverse = {sid: name for sid, name in get_strategy_names()}
+
+    row = 1
+    ws.cell(row=row, column=1, value=f"Умный сканер — {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    ws.cell(row=row, column=1).font = title_font
+    row += 1
+
+    if params:
+        ws.cell(row=row, column=1,
+                value=f"ATR_SL={params.get('atr_sl','--')}  ATR_TP={params.get('atr_tp','--')}  "
+                      f"Риск={params.get('risk_per_trade','--')}  Мин.повторов={params.get('min_hits','--')}")
+        row += 1
+
+    headers = ['№', 'Тикер', 'Сектор', 'Лучшая стратегия',
+               'Доходность%', 'Sharpe', 'Сделок', 'Сигнал']
+    row += 1
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=row, column=col, value=h)
+        cell.font = header_font
+
+    for rank, r in enumerate(all_results, 1):
+        row += 1
+        best_sid = r.get('best_strategy')
+        best_name = strategy_reverse.get(best_sid, best_sid or '—')
+        metrics = r.get('best_metrics', {})
+        sig = r.get('best_signal', {})
+        action_map = {'BUY': '⬆ ПОКУПКА', 'SELL': '⬇ ПРОДАЖА', 'WAIT': '➡ ОЖИДАНИЕ', 'NONE': '—'}
+        ret = metrics.get('total_return', 0)
+        sh = metrics.get('sharpe', 0)
+        tr = metrics.get('total_trades', 0)
+
+        ws.cell(row=row, column=1, value=rank)
+        ws.cell(row=row, column=2, value=r['ticker'])
+        ws.cell(row=row, column=3, value=r['sector'])
+        ws.cell(row=row, column=4, value=best_name if best_sid else '—')
+        ws.cell(row=row, column=5, value=round(ret, 1) if isinstance(ret, (int, float)) else '—')
+        ws.cell(row=row, column=6, value=round(sh, 2) if isinstance(sh, (int, float)) else '—')
+        ws.cell(row=row, column=7, value=tr if tr else '—')
+        ws.cell(row=row, column=8, value=action_map.get(sig.get('action', ''), ''))
+
+        ret_cell = ws.cell(row=row, column=5)
+        if isinstance(ret, (int, float)):
+            ret_cell.fill = green_fill if ret > 0 else red_fill
+
+    ws.column_dimensions['A'].width = 5
+    ws.column_dimensions['B'].width = 8
+    ws.column_dimensions['C'].width = 22
+    ws.column_dimensions['D'].width = 22
+    ws.column_dimensions['E'].width = 14
+    ws.column_dimensions['F'].width = 10
+    ws.column_dimensions['G'].width = 8
+    ws.column_dimensions['H'].width = 14
+
+    # --- Лист 2: Матрица тикер × стратегия ---
+    ws2 = wb.create_sheet("Матрица стратегий")
+    strategy_names_ordered = [(sid, name) for sid, name in get_strategy_names()]
+
+    row = 1
+    ws2.cell(row=row, column=1, value="Умный сканер — матрица стратегий").font = title_font
+    row += 1
+
+    ws2.cell(row=row, column=2, value="Best")
+    ws2.cell(row=row, column=2).font = header_font
+    for ci, (sid, name) in enumerate(strategy_names_ordered, 3):
+        ws2.cell(row=row, column=ci, value=name).font = header_font
+    row += 1
+
+    for r in all_results:
+        strategies = r.get('strategies', {})
+        best_sid = r.get('best_strategy')
+
+        ws2.cell(row=row, column=1, value=r['ticker'])
+        ws2.cell(row=row, column=2, value=strategy_reverse.get(best_sid, '—') if best_sid else '—')
+
+        for ci, (sid, name) in enumerate(strategy_names_ordered, 3):
+            sdata = strategies.get(sid)
+            if sdata:
+                metrics = sdata.get('metrics', {})
+                ret = metrics.get('total_return', 0)
+                ret_s = f"{ret:+.1f}%" if isinstance(ret, (int, float)) else '—'
+                ws2.cell(row=row, column=ci, value=ret_s)
+                cell = ws2.cell(row=row, column=ci)
+                if isinstance(ret, (int, float)):
+                    cell.fill = green_fill if ret > 0 else red_fill
+            else:
+                ws2.cell(row=row, column=ci, value='—')
+        row += 1
+
+    ws2.column_dimensions['A'].width = 8
+    ws2.column_dimensions['B'].width = 18
+    for ci in range(3, 3 + len(strategy_names_ordered)):
+        ws2.column_dimensions[chr(64 + ci) if ci <= 26 else 'A'].width = 16
+
+    wb.save(filepath)
+    return filepath
+
+
 def get_legend_text():
     return LEGEND_TEXT

@@ -188,7 +188,8 @@ class BacktestEngine:
                         'pnl_pct': round(pnl_pct, 2),
                         'exit_reason': exit_reason,
                         'sl_price': round(position['sl'], 2),
-                        'tp_price': round(position['tp'], 2)
+                        'tp_price': round(position['tp'], 2),
+                        'max_hold': self.max_hold,
                     })
 
                     position = None
@@ -221,7 +222,8 @@ class BacktestEngine:
                 'pnl_pct': round(pnl_pct, 2),
                 'exit_reason': 'END_OF_DATA',
                 'sl_price': round(position['sl'], 2),
-                'tp_price': round(position['tp'], 2)
+                'tp_price': round(position['tp'], 2),
+                'max_hold': self.max_hold,
             })
 
         self._final_levels = [p for p, c in

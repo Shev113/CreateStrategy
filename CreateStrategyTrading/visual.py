@@ -882,21 +882,348 @@ class ScannerUI:
         self.status_var.set(f"Готов к сканированию ({total} эмитентов)")
 
 
+class SmartScannerUI:
+    COLUMNS = ('rank', 'ticker', 'sector', 'best_strategy', 'total_return', 'sharpe', 'trades', 'signal_action')
+    HEADERS = {
+        'rank': '№', 'ticker': 'Тикер', 'sector': 'Сектор',
+        'best_strategy': 'Лучшая стратегия',
+        'total_return': 'Доходность',
+        'sharpe': 'Sharpe',
+        'trades': 'Сделок',
+        'signal_action': 'Сигнал',
+    }
+    WIDTHS = {
+        'rank': 35, 'ticker': 70, 'sector': 170,
+        'best_strategy': 140,
+        'total_return': 90,
+        'sharpe': 70,
+        'trades': 65,
+        'signal_action': 90,
+    }
+
+    def __init__(self, parent, sectors, on_scan=None, on_excel=None, on_diary=None, total_tickers=0):
+        self.parent = parent
+        self.root = parent.winfo_toplevel()
+        self._on_scan = on_scan
+        self._on_excel = on_excel
+        self._on_diary = on_diary
+        self._strategy_id_map = {}
+        self._total_tickers = total_tickers
+
+        from strategy.config import get_strategy_names
+        self._strategy_names = get_strategy_names()
+        self._strategy_id_map = {name: sid for sid, name in self._strategy_names}
+
+        self._all_results = []
+
+        row = 0
+        ttk.Label(parent, text="Сектора для сканирования:",
+                  font=('', 10, 'bold')).grid(row=row, column=0, columnspan=2, sticky='w', pady=(5, 2))
+        row += 1
+
+        self.sector_vars = {}
+        sector_frame = ttk.Frame(parent)
+        sector_frame.grid(row=row, column=0, columnspan=2, sticky='w', padx=5)
+        row += 1
+
+        for i, sector in enumerate(sorted(sectors)):
+            var = tk.BooleanVar(value=True)
+            self.sector_vars[sector] = var
+            cb = ttk.Checkbutton(sector_frame, text=sector, variable=var)
+            cb.grid(row=i // 2, column=i % 2, sticky='w', padx=5, pady=1)
+
+        self._total_count_label = ttk.Label(
+            parent, text=f"Всего эмитентов: {total_tickers}",
+            font=('', 8), foreground='gray')
+        self._total_count_label.grid(
+            row=row, column=0, columnspan=2, sticky='w', padx=8, pady=(0, 2))
+        row += 1
+
+        ttk.Separator(parent, orient='horizontal').grid(
+            row=row, column=0, columnspan=2, sticky='ew', pady=3)
+        row += 1
+
+        ttk.Label(parent, text="Параметры (единые для всех стратегий):",
+                  font=('', 10, 'bold')).grid(row=row, column=0, columnspan=2, sticky='w', padx=5, pady=(5, 0))
+        row += 1
+
+        param_frame = ttk.Frame(parent)
+        param_frame.grid(row=row, column=0, columnspan=2, sticky='ew', padx=5, pady=2)
+        row += 1
+
+        self._param_entries = {}
+        base_params_config = [
+            {'key': 'capital', 'label': 'Капитал', 'default': '1000000', 'width': 10},
+            {'key': 'risk_per_trade', 'label': 'Риск%', 'default': '2.0', 'width': 6},
+            {'key': 'atr_sl', 'label': 'ATR SL', 'default': '1.0', 'width': 6},
+            {'key': 'atr_tp', 'label': 'ATR TP', 'default': '2.0', 'width': 6},
+            {'key': 'min_hits', 'label': 'Мин.повт.', 'default': '5', 'width': 6},
+            {'key': 'max_hold', 'label': 'Макс.св.', 'default': '20', 'width': 6},
+            {'key': 'commission', 'label': 'Комис.%', 'default': '0.05', 'width': 6},
+            {'key': 'min_trades', 'label': 'Мин.сд.', 'default': '30', 'width': 6},
+        ]
+        for i, pcfg in enumerate(base_params_config):
+            lbl = ttk.Label(param_frame, text=pcfg['label'] + ':', font=('', 8))
+            lbl.grid(row=0, column=i * 2, padx=(0, 1), sticky='w')
+            ent = ttk.Entry(param_frame, width=pcfg['width'], font=('', 8))
+            ent.grid(row=0, column=i * 2 + 1, padx=(0, 4), sticky='w')
+            ent.insert(0, pcfg['default'])
+            self._param_entries[pcfg['key']] = ent
+
+        ttk.Label(parent, text="Тип входа:").grid(
+            row=row, column=0, sticky='w', padx=5)
+        self._entry_type_combo = ttk.Combobox(
+            parent, state='readonly', width=28, font=('', 8),
+            values=['По рынку (open след. свечи)', 'По цене сигнала (лимитный)'])
+        self._entry_type_combo.current(0)
+        self._entry_type_combo.grid(row=row, column=1, sticky='w', padx=5)
+        row += 1
+
+        n_strategies = len(self._strategy_names)
+        ttk.Label(parent, text=f"Внимание: тестируются {n_strategies} стратегий для каждого тикера",
+                  font=('', 8, 'italic'), foreground='gray').grid(
+            row=row, column=0, columnspan=2, sticky='w', padx=5, pady=(0, 2))
+        row += 1
+
+        date_frame = ttk.Frame(parent)
+        date_frame.grid(row=row, column=0, columnspan=2, pady=2)
+        row += 1
+
+        ttk.Label(date_frame, text="От:").pack(side=tk.LEFT, padx=2)
+        self.smart_date_from = ttk.Entry(date_frame, width=12)
+        self.smart_date_from.pack(side=tk.LEFT, padx=2)
+        self.smart_date_from.insert(0, "2020-01-01")
+
+        ttk.Label(date_frame, text="До:").pack(side=tk.LEFT, padx=2)
+        self.smart_date_to = ttk.Entry(date_frame, width=12)
+        self.smart_date_to.pack(side=tk.LEFT, padx=2)
+        self.smart_date_to.insert(0, datetime.now().strftime("%Y-%m-%d"))
+
+        btn_frame = ttk.Frame(parent)
+        btn_frame.grid(row=row, column=0, columnspan=2, pady=5)
+        row += 1
+
+        self.scan_button = ttk.Button(
+            btn_frame, text="Запустить умный сканер", command=self._request_scan)
+        self.scan_button.pack(side=tk.LEFT, padx=5)
+
+        self.export_excel_button = ttk.Button(
+            btn_frame, text="Экспорт в Excel",
+            command=self._request_excel)
+        self.export_excel_button.pack(side=tk.LEFT, padx=5)
+        self.export_excel_button.config(state='disabled')
+
+        self.diary_button = ttk.Button(
+            btn_frame, text="В дневник",
+            command=self._request_diary)
+        self.diary_button.pack(side=tk.LEFT, padx=5)
+        self.diary_button.config(state='disabled')
+
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(
+            parent, variable=self.progress_var, maximum=100)
+        self.progress_bar.grid(row=row, column=0, columnspan=2, sticky='ew', padx=10, pady=2)
+        row += 1
+
+        self.status_var = tk.StringVar(value="Готов к сканированию" if not total_tickers else f"Готов к сканированию ({total_tickers} эмитентов)")
+        self.status_label = ttk.Label(parent, textvariable=self.status_var, foreground='gray')
+        self.status_label.grid(row=row, column=0, columnspan=2, pady=2)
+        row += 1
+
+        ttk.Separator(parent, orient='horizontal').grid(
+            row=row, column=0, columnspan=2, sticky='ew', pady=3)
+        row += 1
+
+        tree_frame = ttk.Frame(parent)
+        tree_frame.grid(row=row, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
+        parent.grid_rowconfigure(row, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(
+            tree_frame, columns=self.COLUMNS, show='headings',
+            height=22, selectmode='browse'
+        )
+        for col in self.COLUMNS:
+            self.tree.heading(col, text=self.HEADERS[col])
+            self.tree.column(col, width=self.WIDTHS[col], anchor='center')
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+
+        scroll_y = ttk.Scrollbar(tree_frame, orient='vertical', command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll_y.set)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.bind('<Double-1>', self._on_double_click)
+
+    def _request_scan(self):
+        if self._on_scan:
+            self._on_scan()
+
+    def _request_excel(self):
+        if self._on_excel:
+            self._on_excel()
+
+    def _request_diary(self):
+        if self._on_diary:
+            self._on_diary()
+
+    def get_backtest_params(self):
+        try:
+            params = {}
+            for key, entry in self._param_entries.items():
+                raw = entry.get().strip()
+                if key == 'min_trades':
+                    params[key] = int(raw)
+                elif key in ('min_hits', 'max_hold'):
+                    params[key] = int(raw)
+                else:
+                    params[key] = float(raw)
+            params['entry_type'] = self._entry_type_combo.current()
+
+            if 'risk_per_trade' in params:
+                params['risk_per_trade'] = params['risk_per_trade'] / 100.0
+            if 'commission' in params:
+                params['commission'] = params['commission'] / 100.0
+
+            return params
+        except (ValueError, TypeError):
+            return None
+
+    def get_selected_sectors(self):
+        return [s for s, v in self.sector_vars.items() if v.get()]
+
+    def set_running(self, running):
+        if running:
+            self.scan_button.config(state='disabled', text='Сканирование...')
+            self.progress_var.set(0)
+            self.status_var.set('Запуск...')
+        else:
+            self.scan_button.config(state='normal', text='Запустить умный сканер')
+            self.export_excel_button.config(state='normal')
+            self.status_var.set('Завершено')
+
+    def update_progress(self, current, total, ticker, strategy_name):
+        pct = (current / max(total, 1)) * 100
+        self.progress_var.set(pct)
+        self.status_var.set(f"{ticker} — тестирование {strategy_name} ({current}/{total})")
+        self.parent.update_idletasks()
+
+    def show_results(self, results):
+        self._all_results = results
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        strategy_reverse = {sid: name for sid, name in self._strategy_names}
+
+        for rank, r in enumerate(results, 1):
+            best_sid = r.get('best_strategy')
+            best_name = strategy_reverse.get(best_sid, best_sid or '—')
+            metrics = r.get('best_metrics', {})
+            sig = r.get('best_signal', {})
+            action = sig.get('action', 'NONE')
+            action_short = {'BUY': '⬆', 'SELL': '⬇', 'WAIT': '➡', 'NONE': '—'}.get(action, action)
+            ret = metrics.get('total_return', 0)
+            sh = metrics.get('sharpe', 0)
+            trades = metrics.get('total_trades', 0)
+
+            if not best_sid:
+                best_name = '—'
+
+            ret_str = f"{ret:+.1f}%" if isinstance(ret, (int, float)) else "—"
+            sh_str = f"{sh:.2f}" if isinstance(sh, (int, float)) else "—"
+            trades_str = str(trades) if trades else "—"
+
+            values = (rank, r['ticker'], r['sector'], best_name, ret_str, sh_str, trades_str, action_short)
+            tags = ()
+            if isinstance(ret, (int, float)):
+                tags = ('positive',) if ret > 0 else ('negative',)
+            self.tree.insert('', 'end', values=values, tags=tags)
+
+        self.tree.tag_configure('positive', foreground='green')
+        self.tree.tag_configure('negative', foreground='red')
+
+    def _on_double_click(self, event):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self.tree.index(sel[0])
+        if idx < 0 or idx >= len(self._all_results):
+            return
+        result = self._all_results[idx]
+        self._show_detail_window(result)
+
+    def _show_detail_window(self, result):
+        from strategy.config import get_strategy_names
+        strategy_reverse = {sid: name for sid, name in get_strategy_names()}
+
+        win = tk.Toplevel(self.parent)
+        win.title(f"{result['ticker']} — все стратегии")
+        win.geometry("700x400")
+        win.transient(self.parent)
+        win.grab_set()
+
+        frame = ttk.Frame(win)
+        frame.pack(fill=tk.BOTH, expand=1, padx=10, pady=10)
+
+        text = tk.Text(frame, wrap=tk.WORD, font=('Consolas', 10))
+        text.pack(fill=tk.BOTH, expand=1)
+
+        lines = [
+            f"Тикер: {result['ticker']}",
+            f"Сектор: {result['sector']}",
+            "",
+            "────── Результаты по всем стратегиям ──────",
+            "",
+        ]
+        strategies = result.get('strategies', {})
+        for sid, sdata in strategies.items():
+            name = strategy_reverse.get(sid, sid)
+            metrics = sdata.get('metrics', {})
+            score = sdata.get('score', -1)
+            sig = sdata.get('signal', {})
+            action = sig.get('action', 'NONE')
+
+            ret = metrics.get('total_return', 0)
+            sh = metrics.get('sharpe', 0)
+            tr = metrics.get('total_trades', 0)
+            wr = metrics.get('win_rate', 0)
+            pf = metrics.get('profit_factor', 0)
+
+            ret_s = f"{ret:+.1f}%" if isinstance(ret, (int, float)) else "—"
+            sh_s = f"{sh:.2f}" if isinstance(sh, (int, float)) else "—"
+
+            star = '★ ' if sid == result.get('best_strategy') else '  '
+            lines.append(
+                f"{star}{name:<20s} Score:{score:>5.2f}  "
+                f"Ret:{ret_s:>7s}  Sharpe:{sh_s:>5s}  "
+                f"Сд:{tr:>3d}  WR:{wr:.0f}%  PF:{pf:.1f}  "
+                f"Сигнал:{action}"
+            )
+
+        if not strategies:
+            lines.append("  Нет данных.")
+
+        text.insert(tk.END, '\n'.join(lines))
+        text.config(state=tk.DISABLED)
+        _add_copy_menu(text)
+
+
 class DiaryUI:
     COLUMNS = ('date', 'ticker', 'side', 'entry_price', 'sl_price',
-               'tp_price', 'volume', 'qty', 'status', 'exit_price',
+               'tp_price', 'volume', 'qty', 'max_hold', 'status', 'exit_price',
                'exit_reason', 'pnl')
 
     HEADERS = {
         'date': 'Дата', 'ticker': 'Тикер', 'side': 'Напр.',
         'entry_price': 'Цена входа', 'sl_price': 'SL', 'tp_price': 'TP',
-        'volume': 'Объём (₽)', 'qty': 'Кол-во', 'status': 'Статус',
+        'volume': 'Объём (₽)', 'qty': 'Кол-во', 'max_hold': 'Макс.дней',
+        'status': 'Статус',
         'exit_price': 'Цена выхода', 'exit_reason': 'Причина', 'pnl': 'P&L'
     }
 
     WIDTHS = {
         'date': 130, 'ticker': 65, 'side': 55, 'entry_price': 80,
         'sl_price': 70, 'tp_price': 70, 'volume': 90, 'qty': 70,
+        'max_hold': 70,
         'status': 60, 'exit_price': 80, 'exit_reason': 70, 'pnl': 70
     }
 
@@ -953,8 +1280,9 @@ class DiaryUI:
         for e in entries:
             values = (
                 e.date, e.ticker, e.side, e.entry_price,
-                e.sl_price, e.tp_price, e.volume, e.qty, e.status,
-                e.exit_price_display, e.exit_reason or '', e.pnl_text
+                e.sl_price, e.tp_price, e.volume, e.qty,
+                e.max_hold,
+                e.status, e.exit_price_display, e.exit_reason or '', e.pnl_text
             )
             tags = ()
             if e.is_open:

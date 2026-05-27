@@ -3,7 +3,7 @@ import json
 import os
 
 FAVORITES_PATH = os.path.join('results', 'favorites.json')
-INT_KEYS = {'min_hits', 'max_hold', 'rsi_period', 'entry_type'}
+INT_KEYS = {'min_hits', 'max_hold', 'rsi_period', 'entry_type', 'fisher_period', 'trend_period', 'lookback', 'smooth1', 'smooth2', 'smooth3', 'vol_period'}
 
 
 def normalize_numeric_params(params):

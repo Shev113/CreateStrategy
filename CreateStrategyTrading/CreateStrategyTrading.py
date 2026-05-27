@@ -21,11 +21,12 @@ from backtest.engine import BacktestEngine, export_results as _export_results, c
 from screening.levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal
 from screening.reporter import generate_report
 from screening.scanner import Scanner
+from screening.smart_scanner import SmartScanner
 from screening.sectors import SectorDB
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
 from strategy.levels import find_strong_zones
-from visual import StockAppVisual, ScannerUI, DiaryUI, _add_copy_menu
+from visual import StockAppVisual, ScannerUI, SmartScannerUI, DiaryUI, _add_copy_menu
 from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_position_volume
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites
 
@@ -69,6 +70,8 @@ class CreateStrategyApp:
         self.sector_db = SectorDB()
         self._last_scan_results = []
         self._last_scan_params = {}
+        self._last_smart_results = []
+        self._last_smart_params = {}
         self._last_capital = 1_000_000
         self._last_trades = None
         self._last_metrics = None
@@ -150,9 +153,11 @@ class CreateStrategyApp:
 
         tab_analysis = ttk.Frame(notebook)
         tab_scanner = ttk.Frame(notebook)
+        tab_smart_scanner = ttk.Frame(notebook)
         tab_diary = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
         notebook.add(tab_scanner, text='Сканер')
+        notebook.add(tab_smart_scanner, text='Умный сканер')
         notebook.add(tab_diary, text='Дневник сделок')
 
         self.app = StockAppVisual(
@@ -173,6 +178,14 @@ class CreateStrategyApp:
             on_scan=self.on_scanner, on_legend=self.on_show_legend,
             on_excel=self.on_export_excel, on_diary=self.on_add_to_diary,
             on_show_settings=self.on_show_ticker_settings,
+            total_tickers=total_tickers
+        )
+
+        self.smart_scanner_ui = SmartScannerUI(
+            tab_smart_scanner, sectors=all_sectors,
+            on_scan=self.on_smart_scanner,
+            on_excel=self.on_smart_export_excel,
+            on_diary=self.on_add_to_diary,
             total_tickers=total_tickers
         )
 
@@ -258,6 +271,10 @@ class CreateStrategyApp:
         self.app.update_ticker_list(all_tickers, sector_map)
         total = len(self.sector_db.get_tickers(self.sector_db.get_all_sectors()))
         self.scanner_ui.update_total_count(total)
+        if hasattr(self, 'smart_scanner_ui'):
+            self.smart_scanner_ui._total_tickers = total
+            self.smart_scanner_ui._total_count_label.config(text=f"Всего эмитентов: {total}")
+            self.smart_scanner_ui.status_var.set(f"Готов к сканированию ({total} эмитентов)")
         added = total - old_count
         self.app.result_text.insert(
             tk.END,
@@ -566,6 +583,66 @@ class CreateStrategyApp:
         except Exception as e:
             self.scanner_ui.show_report(f"Ошибка экспорта: {str(e)}")
 
+    def on_smart_scanner(self) -> None:
+        """Запуск умного сканера (все стратегии на каждом тикере)"""
+        selected = self.smart_scanner_ui.get_selected_sectors()
+        if not selected:
+            self.smart_scanner_ui.show_results([])
+            return
+
+        params = self.smart_scanner_ui.get_backtest_params()
+        if params is None:
+            self.smart_scanner_ui.show_results([])
+            return
+
+        date_from = self.smart_scanner_ui.smart_date_from.get()
+        date_to = self.smart_scanner_ui.smart_date_to.get()
+        if not self.validate_date(date_from) or not self.validate_date(date_to):
+            self.smart_scanner_ui.show_results([])
+            return
+
+        min_trades = params.pop('min_trades', 30)
+        self._last_smart_params = params
+
+        def run_scan():
+            try:
+                scanner = SmartScanner(sector_db=self.sector_db, fetch_fn=self.get_stock_data)
+                results = scanner.scan(
+                    sectors=selected,
+                    date_from=date_from,
+                    date_to=date_to,
+                    base_params=params,
+                    min_trades=min_trades,
+                    progress_fn=lambda c, t, tick, sid_name: self.smart_scanner_ui.update_progress(c, t, tick, sid_name)
+                )
+                self._last_smart_results = results
+                self.root.after(0, lambda: self.smart_scanner_ui.show_results(results))
+            except Exception as e:
+                self.root.after(0, lambda: self.smart_scanner_ui.status_var.set(f"Ошибка: {str(e)}"))
+            finally:
+                self.root.after(0, lambda: self.smart_scanner_ui.set_running(False))
+
+        self.smart_scanner_ui.set_running(True)
+        t = threading.Thread(target=run_scan, daemon=True)
+        t.start()
+
+    def on_smart_export_excel(self) -> None:
+        """Экспорт результатов умного сканера в Excel"""
+        if not self._last_smart_results:
+            self.smart_scanner_ui.status_var.set("Ошибка: сначала запустите умный сканер.")
+            return
+        from screening.reporter import export_smart_scan_excel
+        os.makedirs('results', exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        fpath = f'results/smart_scanner_{ts}.xlsx'
+        try:
+            export_smart_scan_excel(self._last_smart_results, self._last_smart_params, fpath)
+            self.smart_scanner_ui.status_var.set(f"Excel сохранён: {fpath}")
+        except ImportError:
+            self.smart_scanner_ui.status_var.set("Ошибка: установите openpyxl (pip install openpyxl)")
+        except Exception as e:
+            self.smart_scanner_ui.status_var.set(f"Ошибка экспорта: {str(e)}")
+
     def on_add_to_diary(self) -> None:
         """Добавить выбранные сигналы в торговый дневник"""
         results = self._last_scan_results
@@ -581,6 +658,7 @@ class CreateStrategyApp:
         params = self._last_scan_params
         capital = params.get('capital', 1_000_000)
         risk_per_trade = params.get('risk_per_trade', 0.02)
+        max_hold = params.get('max_hold', 20)
 
         win = tk.Toplevel(self.root)
         win.title("Добавить в дневник")
@@ -678,6 +756,7 @@ class CreateStrategyApp:
                         tp_price=info['tp_price'],
                         volume=info['volume'],
                         qty=info['qty'],
+                        max_hold=max_hold,
                         status='open'
                     ))
             if entries:
@@ -747,6 +826,7 @@ class CreateStrategyApp:
             tp_price=tp_price,
             volume=volume,
             qty=qty,
+            max_hold=params.get('max_hold', 20),
             status='open'
         )
         self.diary_storage.add_entries([entry])
