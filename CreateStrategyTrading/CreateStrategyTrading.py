@@ -26,7 +26,7 @@ from screening.sectors import SectorDB
 from strategy.bounce import check_bounce
 from strategy.indicators import calc_atr
 from strategy.levels import find_strong_zones
-from visual import StockAppVisual, ScannerUI, SmartScannerUI, DiaryUI, _add_copy_menu
+from visual import StockAppVisual, ScannerUI, SmartScannerUI, DiaryUI, StrategyGuideUI, _add_copy_menu
 from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_position_volume
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites
 
@@ -160,6 +160,9 @@ class CreateStrategyApp:
         notebook.add(tab_smart_scanner, text='Умный сканер')
         notebook.add(tab_diary, text='Дневник сделок')
 
+        tab_guide = ttk.Frame(notebook)
+        notebook.add(tab_guide, text='Справочник стратегий')
+
         self.app = StockAppVisual(
             tab_analysis, self.on_select, self.on_export_button,
             self.get_moex_tickers, self.on_backtest,
@@ -194,6 +197,8 @@ class CreateStrategyApp:
             on_check_positions=self.on_check_positions,
             on_show_analysis=self.on_show_analysis
         )
+
+        self.guide_ui = StrategyGuideUI(tab_guide)
 
     def bind_events(self) -> None:
         """Привязка событий"""

@@ -1333,3 +1333,130 @@ class DiaryUI:
                 ])
         import tkinter.messagebox as mb
         mb.showinfo('Экспорт', f'Дневник сохранён:\n{path}')
+
+
+class StrategyGuideUI:
+    COLUMNS = ('name',)
+    HEADERS = {'name': 'Стратегия'}
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.root = parent.winfo_toplevel()
+
+        parent.grid_columnconfigure(0, weight=0, minsize=240)
+        parent.grid_columnconfigure(1, weight=1)
+        parent.grid_rowconfigure(0, weight=1)
+
+        left_frame = ttk.Frame(parent)
+        left_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
+        left_frame.grid_rowconfigure(1, weight=1)
+
+        ttk.Label(left_frame, text="Стратегии", font=('', 10, 'bold')).pack(fill=tk.X, padx=5, pady=(5, 2))
+
+        from strategy.config import get_strategy_names
+        names = get_strategy_names()
+
+        self.tree = ttk.Treeview(left_frame, columns=self.COLUMNS, show='tree', height=30)
+        self.tree.column('#0', width=220, minwidth=180)
+        for sid, sname in names:
+            self.tree.insert('', 'end', iid=sid, text=sname)
+        self.tree.pack(fill='both', expand=1, padx=5, pady=2)
+
+        right_frame = ttk.Frame(parent)
+        right_frame.grid(row=0, column=1, sticky='nsew')
+        right_frame.grid_rowconfigure(0, weight=1)
+        right_frame.grid_columnconfigure(0, weight=1)
+
+        self.text = tk.Text(right_frame, wrap='word', state='disabled',
+                            font=('Consolas', 10), padx=10, pady=10)
+        self.text.grid(row=0, column=0, sticky='nsew')
+
+        scroll_y = ttk.Scrollbar(right_frame, orient='vertical', command=self.text.yview)
+        scroll_y.grid(row=0, column=1, sticky='ns')
+        self.text.configure(yscrollcommand=scroll_y.set)
+
+        _add_copy_menu(self.text)
+
+        self.tree.bind('<<TreeviewSelect>>', self._on_select)
+
+        if names:
+            first_id = names[0][0]
+            self.tree.selection_set(first_id)
+            self._show_guide(first_id)
+
+    def _on_select(self, event):
+        sel = self.tree.selection()
+        if sel:
+            self._show_guide(sel[0])
+
+    def _show_guide(self, strategy_id):
+        from strategy.config import STRATEGY_REGISTRY, get_strategy_params
+        from strategy.guide import get_guide
+
+        entry = STRATEGY_REGISTRY.get(strategy_id)
+        if not entry:
+            return
+
+        guide = get_guide(strategy_id) or {}
+
+        lines = []
+        lines.append(f"{'='*60}")
+        lines.append(f"  {entry['name']}")
+        lines.append(f"{'='*60}")
+        lines.append("")
+
+        author = guide.get('author', '—')
+        source = guide.get('source', '—')
+        lines.append(f"  Автор:     {author}")
+        lines.append(f"  Источник:  {source}")
+        lines.append(f"  ID:        {strategy_id}")
+        lines.append("")
+
+        lines.append(f"{'─'*60}")
+        lines.append(f"  ОПИСАНИЕ")
+        lines.append(f"{'─'*60}")
+        lines.append("")
+        lines.append(f"  {entry['description']}")
+        lines.append("")
+
+        logic = guide.get('logic', '')
+        if logic:
+            lines.append(f"{'─'*60}")
+            lines.append(f"  ЛОГИКА ВХОДА")
+            lines.append(f"{'─'*60}")
+            lines.append("")
+            lines.append(f"  {logic}")
+            lines.append("")
+
+        example = guide.get('example_params', '')
+        if example:
+            lines.append(f"{'─'*60}")
+            lines.append(f"  ПРИМЕР ПАРАМЕТРОВ")
+            lines.append(f"{'─'*60}")
+            lines.append("")
+            lines.append(f"  {example}")
+            lines.append("")
+
+        params = get_strategy_params(strategy_id)
+        if params:
+            lines.append(f"{'─'*60}")
+            lines.append(f"  ПАРАМЕТРЫ")
+            lines.append(f"{'─'*60}")
+            lines.append("")
+            lines.append(f"  {'Параметр':<25} {'По умолч.':<12} {'Описание'}")
+            lines.append(f"  {'─'*25} {'─'*12} {'─'*30}")
+            for p in params:
+                k = p['key']
+                lbl = p.get('label', '')
+                default = str(p.get('default', ''))
+                hint = p.get('hint', '')
+                if hint:
+                    lines.append(f"  {k:<25} {default:<12} {hint}")
+                else:
+                    lines.append(f"  {k:<25} {default:<12} {lbl}")
+
+        self.text.configure(state='normal')
+        self.text.delete('1.0', 'end')
+        self.text.insert('1.0', '\n'.join(lines))
+        self.text.configure(state='disabled')
+        self.text.see('1.0')
