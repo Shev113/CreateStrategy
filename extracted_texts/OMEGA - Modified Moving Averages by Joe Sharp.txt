@@ -1,0 +1,6 @@
+Title:  OMEGA - Modiﬁed Moving Averages by Joe SharpDate:  10 июня 2010 г. 11:58Category:  Tags:  Type: Function, Name: ModifiedMAInputs: Price(Numeric), Length(Numeric);Variables: Factor(0), Slope(0), SMA(0), MMA(0);Slope = 0;For value1 = 1 To Length BeginFactor = 1 + (2 * (value1 - 1));Slope = Slope + (Price[value1 - 1] * ((Length - Factor)/2));End;SMA = Average(Price, Length);MMA = SMA + (6 * Slope) / ((Length + 1) * Length);ModifiedMA = MMA; Type: Indicator, Name: Modified Mov AvgInputs: Price(Close), Length(2);Plot1(ModifiedMA(Price, Length), "MMA"); 
+
+---PAGE BREAK---
+Type: Function, Name: ModifiedMAInputs: Price(Numeric), Length(Numeric);Variables: Factor(0), Slope(0), SMA(0), MMA(0);Slope = 0;For value1 = 1 To Length BeginFactor = 1 + (2 * (value1 - 1));Slope = Slope + (Price[value1 - 1] * ((Length - Factor)/2));End;SMA = Average(Price, Length);MMA = SMA + (6 * Slope) / ((Length + 1) * Length);ModifiedMA = MMA; Type: Indicator, Name: Modified Mov AvgInputs: Price(Close), Length(2);Plot1(ModifiedMA(Price, Length), "MMA"); 
+
+---PAGE BREAK---

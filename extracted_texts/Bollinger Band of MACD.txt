@@ -1,0 +1,6 @@
+Title:  Bollinger Band of MACDDate:  8 июня 2010 г. 16:52Category:  Tags:  Bollinger Band of MACDA1:=Mov(C,12,E)-Mov(C,26,E); BBtop:=BBandTop(A1,10,E,1); BBmid:=A1; BBbot:=BBandBot(A1,10,E,1);BBtop;BBmid;BBbot; 
+
+---PAGE BREAK---
+Bollinger Band of MACDA1:=Mov(C,12,E)-Mov(C,26,E); BBtop:=BBandTop(A1,10,E,1); BBmid:=A1; BBbot:=BBandBot(A1,10,E,1);BBtop;BBmid;BBbot; 
+
+---PAGE BREAK---

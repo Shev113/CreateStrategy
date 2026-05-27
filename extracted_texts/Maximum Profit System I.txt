@@ -1,0 +1,6 @@
+Title:  Maximum Proﬁt System IDate:  7 июня 2010 г. 17:06Category:  Tags:  Maximum Profit System Ienter longWhen(Ref(Mov(C,opt1,E),opt2)>Mov(C,opt3,E))enter shortWhen(Ref(Mov(C,opt1,E),opt2)<Mov(C,opt3,E)) 
+
+---PAGE BREAK---
+Maximum Profit System Ienter longWhen(Ref(Mov(C,opt1,E),opt2)>Mov(C,opt3,E))enter shortWhen(Ref(Mov(C,opt1,E),opt2)<Mov(C,opt3,E)) 
+
+---PAGE BREAK---

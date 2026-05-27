@@ -1,0 +1,6 @@
+Title:  Preferred (Slow) Oscillator by Joe DiNapoliDate:  3 июня 2010 г. 16:09Category:  Tags:  Preferred (Slow) OscillatorFK:=((C - LLV(L,8))/(HHV(H,8) - LLV(L,8)))* 100; FD:=If(Cum(1)+1<(3+2),FK,If(Cum(1)+1=(3+2),Mov(FK,LastValue(3),S),PREV+((1/3)*(FK-PREV)))); STO:=If(Cum(1)+1<(3+2),FD,If(Cum(1)+1=(3+2),Mov(FD,LastValue(3),S),PREV+((1/3)*(FD-PREV))));FD;STO; 
+
+---PAGE BREAK---
+Preferred (Slow) OscillatorFK:=((C - LLV(L,8))/(HHV(H,8) - LLV(L,8)))* 100; FD:=If(Cum(1)+1<(3+2),FK,If(Cum(1)+1=(3+2),Mov(FK,LastValue(3),S),PREV+((1/3)*(FK-PREV)))); STO:=If(Cum(1)+1<(3+2),FD,If(Cum(1)+1=(3+2),Mov(FD,LastValue(3),S),PREV+((1/3)*(FD-PREV))));FD;STO; 
+
+---PAGE BREAK---

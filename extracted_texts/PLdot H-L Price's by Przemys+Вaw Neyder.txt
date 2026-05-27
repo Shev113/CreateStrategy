@@ -1,0 +1,6 @@
+Title:  PLdot H-L Price's by Przemysław NeyderDate:  7 июня 2010 г. 12:17Category:  Tags:  PLdot H-L Price'sOpen Long:Cross(c,mov(h,opt1,s))Close Long:Cross(mov(l,opt2,s),c)Open Short:Cross(mov(l,opt2,s),c)Close Short:Cross(c,mov(h,opt1,s)) 
+
+---PAGE BREAK---
+PLdot H-L Price'sOpen Long:Cross(c,mov(h,opt1,s))Close Long:Cross(mov(l,opt2,s),c)Open Short:Cross(mov(l,opt2,s),c)Close Short:Cross(c,mov(h,opt1,s)) 
+
+---PAGE BREAK---

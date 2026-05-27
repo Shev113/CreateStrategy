@@ -1,0 +1,6 @@
+Title:  J2L Trading System by Jean-Louis LepreuxDate:  7 июня 2010 г. 18:24Category:  Tags:  J2LPeriod:= Input("What Period",5,100,50); TSF( CLOSE,period) - LinearReg( CLOSE,period) Buy signal is when plot crosses up the zero line Draw a trigger line between 0 and 0.05 Sell signal is when plot crosses down the trigger line. J2L Trading SystemEnter Long :Cross( TSF( CLOSE,opt1) ,LinearReg( CLOSE,opt1))Close Long :Cross(opt2,TSF( CLOSE,opt1) - LinearReg( CLOSE,opt1))Optimise : Opt1 : 5 to 100 step 1 Opt2 : 0 to 0.05 step 0.1 
+
+---PAGE BREAK---
+J2LPeriod:= Input("What Period",5,100,50); TSF( CLOSE,period) - LinearReg( CLOSE,period) Buy signal is when plot crosses up the zero line Draw a trigger line between 0 and 0.05 Sell signal is when plot crosses down the trigger line. J2L Trading SystemEnter Long :Cross( TSF( CLOSE,opt1) ,LinearReg( CLOSE,opt1))Close Long :Cross(opt2,TSF( CLOSE,opt1) - LinearReg( CLOSE,opt1))Optimise : Opt1 : 5 to 100 step 1 Opt2 : 0 to 0.05 step 0.1 
+
+---PAGE BREAK---

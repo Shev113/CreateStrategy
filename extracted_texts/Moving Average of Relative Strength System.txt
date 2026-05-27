@@ -1,0 +1,6 @@
+Title:  Moving Average of Relative Strength SystemDate:  7 июня 2010 г. 17:24Category:  Tags:  Moving Average of Relative Strength SystemEnter Long:Cross( Mov(RSI(14),10,E),Mov(RSI(14),30,E)) Enter Short:Cross( Mov(RSI(14),30,E),Mov(RSI(14),10,E)) 
+
+---PAGE BREAK---
+Moving Average of Relative Strength SystemEnter Long:Cross( Mov(RSI(14),10,E),Mov(RSI(14),30,E)) Enter Short:Cross( Mov(RSI(14),30,E),Mov(RSI(14),10,E)) 
+
+---PAGE BREAK---

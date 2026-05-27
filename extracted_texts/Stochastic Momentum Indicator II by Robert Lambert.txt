@@ -1,0 +1,6 @@
+Title:  Stochastic Momentum Indicator II by Robert LambertDate:  2 июня 2010 г. 12:26Category:  Tags:  Stochastic Momentum Indicator IIqq:= Input("lookback q" ,1, 100, 25);rr:= Input("first smoothing r" ,1 ,100 ,13 );ss:= Input("second smoothing s" ,1 ,100 ,1 );uu:= Input("third smoothing u", 1,100,1);value1:=(CLOSE-(.5*(HHV(HIGH ,qq )+ LLV(LOW ,qq ))));value2:=(HHV(HIGH ,qq )- LLV(LOW ,qq ));Numerator:= Mov(Mov(Mov(value1,rr,E),ss,E),uu,E);Denominator:=.5* Mov(Mov(Mov(value2,rr,E),ss,E),uu,E);If(Denominator <>0,(100*(Numerator/Denominator)),0 ); 
+
+---PAGE BREAK---
+Stochastic Momentum Indicator IIqq:= Input("lookback q" ,1, 100, 25);rr:= Input("first smoothing r" ,1 ,100 ,13 );ss:= Input("second smoothing s" ,1 ,100 ,1 );uu:= Input("third smoothing u", 1,100,1);value1:=(CLOSE-(.5*(HHV(HIGH ,qq )+ LLV(LOW ,qq ))));value2:=(HHV(HIGH ,qq )- LLV(LOW ,qq ));Numerator:= Mov(Mov(Mov(value1,rr,E),ss,E),uu,E);Denominator:=.5* Mov(Mov(Mov(value2,rr,E),ss,E),uu,E);If(Denominator <>0,(100*(Numerator/Denominator)),0 ); 
+
+---PAGE BREAK---

@@ -1,0 +1,6 @@
+Title:  Regression Oscillator & Slope/Close Indicator by Richard GoeddeDate:  2 июня 2010 г. 15:15Category:  Tags:  Regression Oscillator100 * (CLOSE/ LinearReg(CLOSE,63)-1) Slope/Close Indicator10000* LinRegSlope(CLOSE,63)/CLOSE 
+
+---PAGE BREAK---
+Regression Oscillator100 * (CLOSE/ LinearReg(CLOSE,63)-1) Slope/Close Indicator10000* LinRegSlope(CLOSE,63)/CLOSE 
+
+---PAGE BREAK---

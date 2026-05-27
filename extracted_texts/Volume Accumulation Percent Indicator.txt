@@ -1,0 +1,6 @@
+Title:  Volume Accumulation Percent IndicatorDate:  31 мая 2010 г. 12:45Category:  Tags:  Volume Accumulation Percent Indicator{Fast line}Mov((PVT()-LLV(PVT(),19))/ (HHV(PVT(),19)-LLV(PVT(),19)), 5, S);{Slow Line}Mov(Mov((PVT()-LLV(PVT(),19))/ (HHV(PVT(),19)-LLV(PVT(),19)), 5, S),3,S) 
+
+---PAGE BREAK---
+Volume Accumulation Percent Indicator{Fast line}Mov((PVT()-LLV(PVT(),19))/ (HHV(PVT(),19)-LLV(PVT(),19)), 5, S);{Slow Line}Mov(Mov((PVT()-LLV(PVT(),19))/ (HHV(PVT(),19)-LLV(PVT(),19)), 5, S),3,S) 
+
+---PAGE BREAK---

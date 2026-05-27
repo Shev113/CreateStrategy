@@ -1,0 +1,6 @@
+Title:  Time Series Forecast System TestDate:  31 мая 2010 г. 18:17Category:  Tags:  Time Series Forecast System TestEnter long:Cross(opt1,((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100))Close long:Cross(((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100),opt2)Enter short:Cross(((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100),opt2)Close short:Cross(opt1,((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100))opt 1: -2 to 0 (with .1 step)opt 2: zero to +2 (with .1 step)opt 3: 2 to 8 (with 1 step)Org. !!opt 1: zero to -2 (with .1 step) 
+
+---PAGE BREAK---
+Time Series Forecast System TestEnter long:Cross(opt1,((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100))Close long:Cross(((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100),opt2)Enter short:Cross(((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100),opt2)Close short:Cross(opt1,((CLOSE-Ref(TSF(C,opt3),-1))/CLOSE*100))opt 1: -2 to 0 (with .1 step)opt 2: zero to +2 (with .1 step)opt 3: 2 to 8 (with 1 step)Org. !!opt 1: zero to -2 (with .1 step) 
+
+---PAGE BREAK---

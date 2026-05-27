@@ -1,0 +1,6 @@
+Title:  Stochastic Smoothed by Mark PetermanDate:  2 июня 2010 г. 13:26Category:  Tags:  Stochastic SmoothedH1:=80;H2:=20;H1;H2;P1:=Mov(((C-LLV(L,10))/(HHV(H,10)-LLV(L,10)))*100,3,E);Mov(((P1-LLV(P1,10))/(HHV(P1,10)-LLV(P1,10)))*100,3,E) 
+
+---PAGE BREAK---
+Stochastic SmoothedH1:=80;H2:=20;H1;H2;P1:=Mov(((C-LLV(L,10))/(HHV(H,10)-LLV(L,10)))*100,3,E);Mov(((P1-LLV(P1,10))/(HHV(P1,10)-LLV(P1,10)))*100,3,E) 
+
+---PAGE BREAK---

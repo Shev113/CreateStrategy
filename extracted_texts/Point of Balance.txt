@@ -1,0 +1,6 @@
+Title:  Point of BalanceDate:  7 июня 2010 г. 12:19Category:  Tags:  Bull and Bear Fear System TestEnter Long:n := 12 {Time periods};BullFear := (HHV(HIGH,n) - LLV(HIGH,n))/2 + LLV(HIGH,n);Cross(CLOSE,BullFear)Enter Short:n := 12 {Time periods};BearFear := (HHV(LOW,n) - LLV(LOW,n))/2 + LLV(LOW,n);Cross(BearFear,CLOSE) 
+ 
+---PAGE BREAK---
+Bull and Bear Fear System TestEnter Long:n := 12 {Time periods};BullFear := (HHV(HIGH,n) - LLV(HIGH,n))/2 + LLV(HIGH,n);Cross(CLOSE,BullFear)Enter Short:n := 12 {Time periods};BearFear := (HHV(LOW,n) - LLV(LOW,n))/2 + LLV(LOW,n);Cross(BearFear,CLOSE) 
+ 
+---PAGE BREAK---

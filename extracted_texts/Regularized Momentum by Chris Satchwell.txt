@@ -1,0 +1,6 @@
+Title:  Regularized Momentum by Chris SatchwellDate:  2 июня 2010 г. 15:21Category:  Tags:  Regularized Momentumx:=Input("number of periods in moving average",1,500,21);d:=Input("regularization constant",0,20,.5);a:=2/(x+1);f:=(PREV*(1+(2*d))+(a*(C-PREV))-(d*Ref(PREV,-1)))/(1+d);(f-Ref(f,-1))/f 
+
+---PAGE BREAK---
+Regularized Momentumx:=Input("number of periods in moving average",1,500,21);d:=Input("regularization constant",0,20,.5);a:=2/(x+1);f:=(PREV*(1+(2*d))+(a*(C-PREV))-(d*Ref(PREV,-1)))/(1+d);(f-Ref(f,-1))/f 
+
+---PAGE BREAK---

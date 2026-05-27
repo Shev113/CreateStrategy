@@ -1,0 +1,6 @@
+Title:  MACD Histogram - CCTDate:  7 июня 2010 г. 13:34Category:  Tags:  MACD Histogram - CCT(Mov(C,13,E) - Mov(C,21,E))-(Mov((Mov(C,13,E) - Mov(C,21,E)),5,E)) 
+
+---PAGE BREAK---
+MACD Histogram - CCT(Mov(C,13,E) - Mov(C,21,E))-(Mov((Mov(C,13,E) - Mov(C,21,E)),5,E)) 
+
+---PAGE BREAK---

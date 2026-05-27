@@ -1,0 +1,6 @@
+Title:  Tema PDI - MDIDate:  31 мая 2010 г. 16:08Category:  Tags:  Tema PDI - MDIPeriods := Input("Enter Tema Smoothing Periods",8,55,13);Tema(PDI(13) - MDI(13),Periods) 
+
+---PAGE BREAK---
+Tema PDI - MDIPeriods := Input("Enter Tema Smoothing Periods",8,55,13);Tema(PDI(13) - MDI(13),Periods) 
+
+---PAGE BREAK---

@@ -1,0 +1,6 @@
+Title:  OMEGA - LBR_HistVoltyRatio by Linda Bradford-RaschkeDate:  10 июня 2010 г. 11:35Category:  Tags:  Type : Indicator, Name : LBR_HistVoltyRatioinputs: Len1(6), Len2(100), CutOff(.50);vars: HVol(0);Plot1(VolatilityStdDev(Len1) / VolatilityStdDev(Len2), "HV1");Plot2(CutOff, "CutOff");if Plot1 crosses above Plot2 OR Plot1 crosses below Plot2 then Alert; 
+
+---PAGE BREAK---
+Type : Indicator, Name : LBR_HistVoltyRatioinputs: Len1(6), Len2(100), CutOff(.50);vars: HVol(0);Plot1(VolatilityStdDev(Len1) / VolatilityStdDev(Len2), "HV1");Plot2(CutOff, "CutOff");if Plot1 crosses above Plot2 OR Plot1 crosses below Plot2 then Alert; 
+
+---PAGE BREAK---

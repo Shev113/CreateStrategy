@@ -1,0 +1,9 @@
+Title:  Self-Adjusting RSI by David SepiashviliDate:  1 июня 2010 г. 15:28Category:  Tags:  Self-Adjusting RSIx:=Input("number of periods for RSI",1,2000,14);k1:=Input("standard deviation constant",0.1,5,1.8);c1:=Input("SMA constant",0.1,5,2);m1:=Input("method <1=SD/2=SMA>",1,2,1);top:=If(m1=1,50+(k1*Stdev(RSI(x),x)),50+(c1*Mov(Abs(RSI(x)-Mov(RSI(x),x,S)),x,S)));bottom:=If(m1=1,50-(k1*Stdev(RSI(x),x)),50-(c1*Mov(Abs(RSI(x)-Mov(RSI(x),x,S)),x,S)));RSI(x);top;bottom
+ 
+---PAGE BREAK---
+Self-Adjusting RSIx:=Input("number of periods for RSI",1,2000,14);k1:=Input("standard deviation constant",0.1,5,1.8);c1:=Input("SMA constant",0.1,5,2);m1:=Input("method <1=SD/2=SMA>",1,2,1);top:=If(m1=1,50+(k1*Stdev(RSI(x),x)),50+(c1*Mov(Abs(RSI(x)-Mov(RSI(x),x,S)),x,S)));bottom:=If(m1=1,50-(k1*Stdev(RSI(x),x)),50-(c1*Mov(Abs(RSI(x)-Mov(RSI(x),x,S)),x,S)));RSI(x);top;bottom
+ 
+---PAGE BREAK---
+Self-Adjusting RSIx:=Input("number of periods for RSI",1,2000,14);k1:=Input("standard deviation constant",0.1,5,1.8);c1:=Input("SMA constant",0.1,5,2);m1:=Input("method <1=SD/2=SMA>",1,2,1);top:=If(m1=1,50+(k1*Stdev(RSI(x),x)),50+(c1*Mov(Abs(RSI(x)-Mov(RSI(x),x,S)),x,S)));bottom:=If(m1=1,50-(k1*Stdev(RSI(x),x)),50-(c1*Mov(Abs(RSI(x)-Mov(RSI(x),x,S)),x,S)));RSI(x);top;bottom
+ 
+---PAGE BREAK---

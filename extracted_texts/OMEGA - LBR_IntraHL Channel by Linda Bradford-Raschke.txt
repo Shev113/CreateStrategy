@@ -1,0 +1,6 @@
+Title:  OMEGA - LBR_IntraHL Channel by Linda Bradford-RaschkeDate:  10 июня 2010 г. 11:36Category:  Tags:  Type : Indicator, Name : LBR_IntraHLChannelinputs: HighLowLen(5);vars: x(0), HHigh(0), LLow(0);if DataCompression <= 1 and Currentbar > 1 then beginfor x = 0 to HighLowLen - 1 beginif x = 0 then beginHHigh = HighD(0);LLow = LowD(0);end;if x > 0 then beginvalue1 = HighD(x);value2 = LowD(x);if value1 > HHigh thenHHigh = value1;if value2 < LLow AND Value2 > 0 thenLLow = value2;end;end;Plot1(HHigh, "Highest High");Plot2(LLow, "Lowest Low");end;if DataCompression > 1 and Currentbar > 1 then beginPlot1(Highest(High,HighLowLen), "Highest High");Plot2(Lowest(Low,HighLowLen), "Lowest Low");end; 
+
+---PAGE BREAK---
+Type : Indicator, Name : LBR_IntraHLChannelinputs: HighLowLen(5);vars: x(0), HHigh(0), LLow(0);if DataCompression <= 1 and Currentbar > 1 then beginfor x = 0 to HighLowLen - 1 beginif x = 0 then beginHHigh = HighD(0);LLow = LowD(0);end;if x > 0 then beginvalue1 = HighD(x);value2 = LowD(x);if value1 > HHigh thenHHigh = value1;if value2 < LLow AND Value2 > 0 thenLLow = value2;end;end;Plot1(HHigh, "Highest High");Plot2(LLow, "Lowest Low");end;if DataCompression > 1 and Currentbar > 1 then beginPlot1(Highest(High,HighLowLen), "Highest High");Plot2(Lowest(Low,HighLowLen), "Lowest Low");end; 
+
+---PAGE BREAK---

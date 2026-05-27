@@ -1,0 +1,6 @@
+Title:  OMEGA - SystemD by George PruittDate:  10 июня 2010 г. 14:49Category:  Tags:  Typ : System, Name : SystemD{Moving Average Crossover}{programming by George Pruitt}{www.futurestruth.com}{828-697-0273}value1 = (highest(high,3) - lowest(low,3))/2.0;buy at open of tomorrow + value1 stop;sell at open of tomorrow - value1 stop; 
+
+---PAGE BREAK---
+Typ : System, Name : SystemD{Moving Average Crossover}{programming by George Pruitt}{www.futurestruth.com}{828-697-0273}value1 = (highest(high,3) - lowest(low,3))/2.0;buy at open of tomorrow + value1 stop;sell at open of tomorrow - value1 stop; 
+
+---PAGE BREAK---

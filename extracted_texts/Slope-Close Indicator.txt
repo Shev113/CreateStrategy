@@ -1,0 +1,6 @@
+Title:  Slope/Close IndicatorDate:  1 июня 2010 г. 18:27Category:  Tags:  Slope/Close Indicator10000* LinRegSlope(CLOSE,63)/CLOSE 
+
+---PAGE BREAK---
+Slope/Close Indicator10000* LinRegSlope(CLOSE,63)/CLOSE 
+
+---PAGE BREAK---

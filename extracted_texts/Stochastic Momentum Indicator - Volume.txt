@@ -1,0 +1,6 @@
+Title:  Stochastic Momentum Indicator - VolumeDate:  2 июня 2010 г. 12:32Category:  Tags:  Stochastic Momentum Indicator - Volume100*(Mov(Mov(V-(0.5*(HHV(V,5)+LLV(V,5))),3,S),3,S)/(0.5*Mov(Mov(HHV(V,5)-LLV(V,5),3,S),3,S))) 
+
+---PAGE BREAK---
+Stochastic Momentum Indicator - Volume100*(Mov(Mov(V-(0.5*(HHV(V,5)+LLV(V,5))),3,S),3,S)/(0.5*Mov(Mov(HHV(V,5)-LLV(V,5),3,S),3,S))) 
+
+---PAGE BREAK---

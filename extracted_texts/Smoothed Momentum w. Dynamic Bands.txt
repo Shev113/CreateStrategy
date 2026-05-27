@@ -1,0 +1,6 @@
+Title:  Smoothed Momentum w. Dynamic BandsDate:  2 июня 2010 г. 11:53Category:  Tags:  Smoothed Momentum w. Dynamic BandsA:=Mov(ROC(Cum(If(C>Ref(Mov(C,10,E),-1),1,If(C<Ref(Mov(C,10,E),-1),-1,0))),5,$),5,E);Green:=If(A>Ref(A,-1),A,0);Red:=If(A<Ref(A,-1),A,0);Sig:=Mov(A,5,S);PS:=34;PB:=34;UZ:=Mov(A,PS,S)+(1.3185*Stdev(A,PS));LZ:=Mov(A,PB,S)-(1.3185*Stdev(A,PB));UZ;LZ;Sig;Green;{Plot as Histogram}Red;{plot as histogram} 
+
+---PAGE BREAK---
+Smoothed Momentum w. Dynamic BandsA:=Mov(ROC(Cum(If(C>Ref(Mov(C,10,E),-1),1,If(C<Ref(Mov(C,10,E),-1),-1,0))),5,$),5,E);Green:=If(A>Ref(A,-1),A,0);Red:=If(A<Ref(A,-1),A,0);Sig:=Mov(A,5,S);PS:=34;PB:=34;UZ:=Mov(A,PS,S)+(1.3185*Stdev(A,PS));LZ:=Mov(A,PB,S)-(1.3185*Stdev(A,PB));UZ;LZ;Sig;Green;{Plot as Histogram}Red;{plot as histogram} 
+
+---PAGE BREAK---

@@ -1,0 +1,6 @@
+Title:  Pro Go I by Larry WilliamsDate:  3 июня 2010 г. 18:27Category:  Tags:  PRO-GO - Williams-ProfessionalsProf:=Mov(O - C,7,S);(((Sum( Prof - LLV(Prof,7),7)) / Sum((HHV(Prof,7) - LLV(Prof,7)),7)))*100;25;75; PRO-GO - Williams-PublicPublic:= Mov(O - Ref(C,-1), 7, S);((((Sum( Public - LLV(Public,7),7)) / Sum((HHV(Public,7) - LLV(Public,7)),7)))*100);75;25; 
+
+---PAGE BREAK---
+PRO-GO - Williams-ProfessionalsProf:=Mov(O - C,7,S);(((Sum( Prof - LLV(Prof,7),7)) / Sum((HHV(Prof,7) - LLV(Prof,7)),7)))*100;25;75; PRO-GO - Williams-PublicPublic:= Mov(O - Ref(C,-1), 7, S);((((Sum( Public - LLV(Public,7),7)) / Sum((HHV(Public,7) - LLV(Public,7)),7)))*100);75;25; 
+
+---PAGE BREAK---

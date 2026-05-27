@@ -1,0 +1,6 @@
+Title:  CCI Moving Average Crossover System TestDate:  8 июня 2010 г. 16:08Category:  Tags:  CCI Moving Average Crossover System TestEnter Long:When( CCI( opt1 ) ,< ,Mov( CCI( opt1 ) ,opt2 ,E ) ) AND When( Ref( CCI(opt1),-1) ,>= ,Ref( Mov( CCI( opt1 ) ,opt2 ,E ) ,-1 ) )Enter Short:When( CCI( opt1 ) ,> ,Mov( CCI( opt1 ) ,opt2 ,E ) ) AND When( Ref( CCI(opt1),-1) ,<= ,Ref( Mov( CCI( opt1 ) ,opt2 ,E ) ,-1 ) )Optimization Variables:Opt1:Min = 5 Max = 40 Step = 1Opt2:Min = 5 Max = 40 Step = 1 
+
+---PAGE BREAK---
+CCI Moving Average Crossover System TestEnter Long:When( CCI( opt1 ) ,< ,Mov( CCI( opt1 ) ,opt2 ,E ) ) AND When( Ref( CCI(opt1),-1) ,>= ,Ref( Mov( CCI( opt1 ) ,opt2 ,E ) ,-1 ) )Enter Short:When( CCI( opt1 ) ,> ,Mov( CCI( opt1 ) ,opt2 ,E ) ) AND When( Ref( CCI(opt1),-1) ,<= ,Ref( Mov( CCI( opt1 ) ,opt2 ,E ) ,-1 ) )Optimization Variables:Opt1:Min = 5 Max = 40 Step = 1Opt2:Min = 5 Max = 40 Step = 1 
+
+---PAGE BREAK---

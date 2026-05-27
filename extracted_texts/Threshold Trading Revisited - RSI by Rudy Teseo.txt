@@ -1,0 +1,6 @@
+Title:  Threshold Trading Revisited - RSI by Rudy TeseoDate:  31 мая 2010 г. 18:11Category:  Tags:  Threshold Trading Revisited - RSI FormulasRSI enter longRef( Cross( RSI(14), 30),-1) and H >= Ref( H, -1 )+1RSI enter shortRef( Cross( 70, RSI(14)),-1) AND L <= Ref( L, -1 )-1 
+
+---PAGE BREAK---
+Threshold Trading Revisited - RSI FormulasRSI enter longRef( Cross( RSI(14), 30),-1) and H >= Ref( H, -1 )+1RSI enter shortRef( Cross( 70, RSI(14)),-1) AND L <= Ref( L, -1 )-1 
+
+---PAGE BREAK---

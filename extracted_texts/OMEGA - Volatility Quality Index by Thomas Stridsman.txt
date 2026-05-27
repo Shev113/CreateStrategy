@@ -1,0 +1,6 @@
+Title:  OMEGA - Volatility Quality Index by Thomas StridsmanDate:  10 июня 2010 г. 15:38Category:  Tags:  Type : Indicator, Name : Volatility Quality IndexVariables: VQI(0), SumVQI(0);If TrueRange <> 0 and (High - Low) <> 0 ThenVQI = ((Close - Close[1]) / TrueRange + (Close - Open) / (High - Low)) * 0.5ElseVQI=VQI[1];VQI = AbsValue(VQI) * ((Close - Close[1] + (Close - Open)) * 0.5);SumVQI = SumVQI + VQI;Plot1(SumVQI,"");Plot2(Average(SumVQI,9),"");Plot3(Average(SumVQI,200),""); 
+
+---PAGE BREAK---
+Type : Indicator, Name : Volatility Quality IndexVariables: VQI(0), SumVQI(0);If TrueRange <> 0 and (High - Low) <> 0 ThenVQI = ((Close - Close[1]) / TrueRange + (Close - Open) / (High - Low)) * 0.5ElseVQI=VQI[1];VQI = AbsValue(VQI) * ((Close - Close[1] + (Close - Open)) * 0.5);SumVQI = SumVQI + VQI;Plot1(SumVQI,"");Plot2(Average(SumVQI,9),"");Plot3(Average(SumVQI,200),""); 
+
+---PAGE BREAK---

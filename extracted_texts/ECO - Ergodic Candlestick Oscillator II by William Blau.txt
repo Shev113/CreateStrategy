@@ -1,0 +1,6 @@
+Title:  ECO - Ergodic Candlestick Oscillator II by William BlauDate:  8 июня 2010 г. 12:56Category:  Tags:  ECO - Ergodic Candlestick Oscillator IIave1:=11; {ms says 25, esignal default is 32,vlad uses 11}ave2:=4; {ms says 13, esignal default is 12,vlad uses 4}ave3:=5; {esignal says5}eco:=(Mov(Mov(C-O,ave1,E),ave2,E)/Mov(Mov(H-L,ave1,E),ave2,E))*100;signal:=Mov(eco,ave3,E);eco;signal 
+
+---PAGE BREAK---
+ECO - Ergodic Candlestick Oscillator IIave1:=11; {ms says 25, esignal default is 32,vlad uses 11}ave2:=4; {ms says 13, esignal default is 12,vlad uses 4}ave3:=5; {esignal says5}eco:=(Mov(Mov(C-O,ave1,E),ave2,E)/Mov(Mov(H-L,ave1,E),ave2,E))*100;signal:=Mov(eco,ave3,E);eco;signal 
+
+---PAGE BREAK---

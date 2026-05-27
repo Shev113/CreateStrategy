@@ -1,0 +1,6 @@
+Title:  True Strength Index (TSI) and TSI Moving AverageDate:  31 мая 2010 г. 18:03Category:  Tags:  TSI Moving AverageMov((100*(Mov(Mov(Roc(C,1,$),25,E),13,E)/Mov(Mov(Abs(Roc(c,1,$)),25,E),13,E))),20,E) 
+
+---PAGE BREAK---
+TSI Moving AverageMov((100*(Mov(Mov(Roc(C,1,$),25,E),13,E)/Mov(Mov(Abs(Roc(c,1,$)),25,E),13,E))),20,E) 
+
+---PAGE BREAK---

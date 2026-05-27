@@ -1,0 +1,9 @@
+Title:  Base Channel SystemDate:  8 июня 2010 г. 17:00Category:  Tags:  BaseCIf(Cum(1)<=31,1,(((Stdev(C,30)-Ref(Stdev(C,30),-1))/Stdev(C,30))+1)*PREV) The next two formulas should be entered in the Enter Long and Enter Short of a system test. Base Channel SystemEnter LongCross(H,Ref(HHV(H,20)+Fml("BaseC"),-1))Enter shortCross(Ref(LLV(L,20)-Fml("BaseC"),-1),L)  
+If you just want to look at the formulas on a chart enter the following into the indicator builder and plot then on top of your chart. Base Channel{Formula1}Ref(HHV(H,20) + Fml("BaseC"),-1);{Formula2}Ref(LLV(L,20) - Fml("BaseC"),-1)  
+---PAGE BREAK---
+BaseCIf(Cum(1)<=31,1,(((Stdev(C,30)-Ref(Stdev(C,30),-1))/Stdev(C,30))+1)*PREV) The next two formulas should be entered in the Enter Long and Enter Short of a system test. Base Channel SystemEnter LongCross(H,Ref(HHV(H,20)+Fml("BaseC"),-1))Enter shortCross(Ref(LLV(L,20)-Fml("BaseC"),-1),L)  
+If you just want to look at the formulas on a chart enter the following into the indicator builder and plot then on top of your chart. Base Channel{Formula1}Ref(HHV(H,20) + Fml("BaseC"),-1);{Formula2}Ref(LLV(L,20) - Fml("BaseC"),-1)  
+---PAGE BREAK---
+BaseCIf(Cum(1)<=31,1,(((Stdev(C,30)-Ref(Stdev(C,30),-1))/Stdev(C,30))+1)*PREV) The next two formulas should be entered in the Enter Long and Enter Short of a system test. Base Channel SystemEnter LongCross(H,Ref(HHV(H,20)+Fml("BaseC"),-1))Enter shortCross(Ref(LLV(L,20)-Fml("BaseC"),-1),L)  
+If you just want to look at the formulas on a chart enter the following into the indicator builder and plot then on top of your chart. Base Channel{Formula1}Ref(HHV(H,20) + Fml("BaseC"),-1);{Formula2}Ref(LLV(L,20) - Fml("BaseC"),-1)  
+---PAGE BREAK---

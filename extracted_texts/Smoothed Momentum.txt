@@ -1,0 +1,6 @@
+Title:  Smoothed MomentumDate:  2 июня 2010 г. 11:52Category:  Tags:  Smoothed MomentumMov(ROC(Cum(If(C>Ref(Mov(C,10,E),-1),1,If(C<Ref(Mov(C,10,E),-1),-1,0))),5,$),5,E) 
+
+---PAGE BREAK---
+Smoothed MomentumMov(ROC(Cum(If(C>Ref(Mov(C,10,E),-1),1,If(C<Ref(Mov(C,10,E),-1),-1,0))),5,$),5,E) 
+
+---PAGE BREAK---

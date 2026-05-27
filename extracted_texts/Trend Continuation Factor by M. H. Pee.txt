@@ -1,0 +1,6 @@
+Title:  Trend Continuation Factor by M. H. PeeDate:  31 мая 2010 г. 17:17Category:  Tags:  +TCFpc:=If(ROC(C,1,$)>0,ROC(C,1,$),0);nc:=If(ROC(C,1,$)<0,Neg(ROC(C,1,$)),0);ncf:=If(nc=0,0,PREV+nc);Sum(pc,35)-Sum(ncf,35) -TCFpc:=If(ROC(C,1,$)>0,ROC(C,1,$),0);nc:=If(ROC(C,1,$)<0,Neg(ROC(C,1,$)),0);pcf:=If(pc=0,0,PREV+pc);Sum(nc,35)-Sum(pcf,35)  Positionpc:=If(ROC(C,1,$)>0,ROC(C,1,$),0);nc:=If(ROC(C,1,$)<0,Neg(ROC(C,1,$)),0);pcf:=If(pc=0,0,PREV+pc);ncf:=If(nc=0,0,PREV+nc);ptcf:=Sum(pc,35)-Sum(ncf,35);ntcf:=Sum(nc,35)-Sum(pcf,35);If(ptcf>0,1, If(ntcf>0,-1, PREV)); 
+
+---PAGE BREAK---
++TCFpc:=If(ROC(C,1,$)>0,ROC(C,1,$),0);nc:=If(ROC(C,1,$)<0,Neg(ROC(C,1,$)),0);ncf:=If(nc=0,0,PREV+nc);Sum(pc,35)-Sum(ncf,35) -TCFpc:=If(ROC(C,1,$)>0,ROC(C,1,$),0);nc:=If(ROC(C,1,$)<0,Neg(ROC(C,1,$)),0);pcf:=If(pc=0,0,PREV+pc);Sum(nc,35)-Sum(pcf,35)  Positionpc:=If(ROC(C,1,$)>0,ROC(C,1,$),0);nc:=If(ROC(C,1,$)<0,Neg(ROC(C,1,$)),0);pcf:=If(pc=0,0,PREV+pc);ncf:=If(nc=0,0,PREV+nc);ptcf:=Sum(pc,35)-Sum(ncf,35);ntcf:=Sum(nc,35)-Sum(pcf,35);If(ptcf>0,1, If(ntcf>0,-1, PREV)); 
+
+---PAGE BREAK---

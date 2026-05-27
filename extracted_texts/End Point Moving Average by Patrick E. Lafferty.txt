@@ -1,0 +1,6 @@
+Title:  End Point Moving Average by Patrick E. LaffertyDate:  8 июня 2010 г. 14:00Category:  Tags:  End Point Moving Average(14 * Sum( Cum( 1 ) * C,14 ) - Sum( Cum( 1),14) * Sum( C,14) ) /(14 * Sum( Pwr( Cum( 1 ),2),14 ) - Pwr( Sum(Cum( 1 ),14 ),2 ) ) *Cum( 1 ) + (Mov(C,14,S) - Mov( Cum( 1 ),14,S) * (14 * Sum( Cum( 1 ) * C,14) - Sum( Cum( 1 ),14 ) * Sum( C,14) ) / (14 *Sum( Pwr( Cum( 1 ),2 ),14) - Pwr( Sum( Cum( 1 ),14 ),2 ) ) ) 
+
+---PAGE BREAK---
+End Point Moving Average(14 * Sum( Cum( 1 ) * C,14 ) - Sum( Cum( 1),14) * Sum( C,14) ) /(14 * Sum( Pwr( Cum( 1 ),2),14 ) - Pwr( Sum(Cum( 1 ),14 ),2 ) ) *Cum( 1 ) + (Mov(C,14,S) - Mov( Cum( 1 ),14,S) * (14 * Sum( Cum( 1 ) * C,14) - Sum( Cum( 1 ),14 ) * Sum( C,14) ) / (14 *Sum( Pwr( Cum( 1 ),2 ),14) - Pwr( Sum( Cum( 1 ),14 ),2 ) ) ) 
+
+---PAGE BREAK---

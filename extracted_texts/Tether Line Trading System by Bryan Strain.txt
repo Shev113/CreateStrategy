@@ -1,0 +1,6 @@
+Title:  Tether Line Trading System by Bryan StrainDate:  31 мая 2010 г. 18:07Category:  Tags:  Bryans Tether Line( HHV(H,50) + LLV(L,50) ) / 2 Bryans Volume OscillatorMov(If(C>O,+V,If(C<O,-V,0)),7,S)  Bryans MBO IndicatorMov(C,25,S) - Mov(C,200,S) Tether Line Trading SystemEnter Long:C > ( HHV(H,50) + LLV(L,50) ) / 2 AND Mov(If(C>O,+V,If(C<O,-V,0)),7,S) > 0 AND ( Mov(C,25,S) - Mov(C,200,S) ) > 0Close Long:C < ( HHV(H,50) + LLV(L,50) ) / 2 
+
+---PAGE BREAK---
+Bryans Tether Line( HHV(H,50) + LLV(L,50) ) / 2 Bryans Volume OscillatorMov(If(C>O,+V,If(C<O,-V,0)),7,S)  Bryans MBO IndicatorMov(C,25,S) - Mov(C,200,S) Tether Line Trading SystemEnter Long:C > ( HHV(H,50) + LLV(L,50) ) / 2 AND Mov(If(C>O,+V,If(C<O,-V,0)),7,S) > 0 AND ( Mov(C,25,S) - Mov(C,200,S) ) > 0Close Long:C < ( HHV(H,50) + LLV(L,50) ) / 2 
+
+---PAGE BREAK---

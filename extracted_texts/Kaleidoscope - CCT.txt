@@ -1,0 +1,6 @@
+Title:  Kaleidoscope - CCTDate:  7 июня 2010 г. 18:13Category:  Tags:  Kaleidoscope - CCTLinRegSlope(C,13)+100 * ( Mov( Mov( ROC(C,1,$),34,E),21,E) /Mov( Mov( Abs( ROC(C,1,$)),34,E),21,E))+100 *( Mov( Mov(C - (.5 * ( HHV(H,13) + LLV(L,13))),21,E),3,E) /(.5*Mov( Mov( HHV(H,13) - LLV(L,13),21,E),3,E))) 
+
+---PAGE BREAK---
+Kaleidoscope - CCTLinRegSlope(C,13)+100 * ( Mov( Mov( ROC(C,1,$),34,E),21,E) /Mov( Mov( Abs( ROC(C,1,$)),34,E),21,E))+100 *( Mov( Mov(C - (.5 * ( HHV(H,13) + LLV(L,13))),21,E),3,E) /(.5*Mov( Mov( HHV(H,13) - LLV(L,13),21,E),3,E))) 
+
+---PAGE BREAK---

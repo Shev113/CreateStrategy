@@ -1,0 +1,6 @@
+Title:  OMEGA - SMI OscillatorDate:  10 июня 2010 г. 14:30Category:  Tags:  Type : Function, Name : SMIinput:length1(NumericSimple),length2(NumericSimple),length3(NumericSimple);var:HH(0),LL(0);HH = Highest(H,length1);LL = Lowest (L,length1);SMI = 100 * (XAverage(XAverage(C-(0.5*(HH+LL)),length2),length3) /(0.5 * XAverage(XAverage(HH-LL,length2),length3))); Type : Indicator, Name : SMI Oscillatorinput:length1(2),length2(25),length3(12),signal(5);Value1=SMI(length1,length2,length3);Value2=XAverage(Value1,Signal);Plot1(Value1,"SMI");Plot2(Value2,"Signal"); 
+
+---PAGE BREAK---
+Type : Function, Name : SMIinput:length1(NumericSimple),length2(NumericSimple),length3(NumericSimple);var:HH(0),LL(0);HH = Highest(H,length1);LL = Lowest (L,length1);SMI = 100 * (XAverage(XAverage(C-(0.5*(HH+LL)),length2),length3) /(0.5 * XAverage(XAverage(HH-LL,length2),length3))); Type : Indicator, Name : SMI Oscillatorinput:length1(2),length2(25),length3(12),signal(5);Value1=SMI(length1,length2,length3);Value2=XAverage(Value1,Signal);Plot1(Value1,"SMI");Plot2(Value2,"Signal"); 
+
+---PAGE BREAK---

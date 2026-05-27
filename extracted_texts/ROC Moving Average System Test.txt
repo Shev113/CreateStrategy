@@ -1,0 +1,6 @@
+Title:  ROC Moving Average System TestDate:  3 июня 2010 г. 15:52Category:  Tags:  ROC Moving Average System Test  Enter long:ROC(Mov(C,12,E),1,%)>0 AND ROC(Mov(C,60,E),1,%)>0Exit Long:(ROC(Mov(C,12,E),1,%)<0 AND ROC(Mov(C,60,E),1,%)>0) OR(ROC(Mov(C,12,E),1,%)>0 AND ROC(Mov(C,60,E),1,%)<0)Enter short:ROC(Mov(C,12,E),1,%)<0 AND ROC(Mov(C,60,E),1,%)<0Exit short:(ROC(Mov(C,12,E),1,%)<0 AND ROC(Mov(C,60,E),1,%)>0) OR(ROC(Mov(C,12,E),1,%)>0 AND ROC(Mov(C,60,E),1,%)<0) 
+
+---PAGE BREAK---
+ROC Moving Average System Test  Enter long:ROC(Mov(C,12,E),1,%)>0 AND ROC(Mov(C,60,E),1,%)>0Exit Long:(ROC(Mov(C,12,E),1,%)<0 AND ROC(Mov(C,60,E),1,%)>0) OR(ROC(Mov(C,12,E),1,%)>0 AND ROC(Mov(C,60,E),1,%)<0)Enter short:ROC(Mov(C,12,E),1,%)<0 AND ROC(Mov(C,60,E),1,%)<0Exit short:(ROC(Mov(C,12,E),1,%)<0 AND ROC(Mov(C,60,E),1,%)>0) OR(ROC(Mov(C,12,E),1,%)>0 AND ROC(Mov(C,60,E),1,%)<0) 
+
+---PAGE BREAK---

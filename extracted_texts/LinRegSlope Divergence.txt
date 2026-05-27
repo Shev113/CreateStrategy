@@ -1,0 +1,6 @@
+Title:  LinRegSlope DivergenceDate:  7 июня 2010 г. 18:10Category:  Tags:  LinRegSlope DivergenceBuy long:divergence(C,LinRegSlope(C,2),0.01)=-1Sell short:divergence(C,LinRegSlope(C,2),0.01)=1 
+ 
+---PAGE BREAK---
+LinRegSlope DivergenceBuy long:divergence(C,LinRegSlope(C,2),0.01)=-1Sell short:divergence(C,LinRegSlope(C,2),0.01)=1 
+ 
+---PAGE BREAK---

@@ -1,0 +1,6 @@
+Title:  Smoothed DMI Index (20 Period MA) (#028a)Date:  2 июня 2010 г. 11:50Category:  Tags:  Smoothed DMI Index (20 Period MA) (#028a)Mov(PDI(14)-MDI(14),20,S) 
+
+---PAGE BREAK---
+Smoothed DMI Index (20 Period MA) (#028a)Mov(PDI(14)-MDI(14),20,S) 
+
+---PAGE BREAK---

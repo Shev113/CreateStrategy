@@ -1,0 +1,6 @@
+Title:  Combining Trend and Oscillator SignalsDate:  8 июня 2010 г. 16:10Category:  Tags:  Combining Trend and Oscillator SignalsENTER LONG:C>Mov(C,OPT1,S) AND LinRegSlope(C,OPT2)>LinearReg(LinRegSlope(C ,OPT3),50)CLOSE LONG:C<Mov(C,OPT1,S) OR LinRegSlope(C,OPT2)<LinearReg(LinRegSlope(C ,OPT3),50)ENTER SHORT:C<Mov(C,OPT1,S) AND LinRegSlope(C,OPT2)<LinearReg(LinRegSlope(C ,OPT3),50)CLOSE SHORT:C>Mov(C,OPT1,S) OR LinRegSlope(C,OPT2)>LinearReg(LinRegSlope(C ,OPT3),50)OPTIMIZE:OPT1: Minimum 5 Maximum 50 Step 5OPT2: Minimum 5 Maximum 50 Step 5OPT3: Minimum 5 Maximum 50 Step 5Initial Equity: Any amount.Positions: Long and ShortTrade Price: CloseTrade delay: 0 
+
+---PAGE BREAK---
+Combining Trend and Oscillator SignalsENTER LONG:C>Mov(C,OPT1,S) AND LinRegSlope(C,OPT2)>LinearReg(LinRegSlope(C ,OPT3),50)CLOSE LONG:C<Mov(C,OPT1,S) OR LinRegSlope(C,OPT2)<LinearReg(LinRegSlope(C ,OPT3),50)ENTER SHORT:C<Mov(C,OPT1,S) AND LinRegSlope(C,OPT2)<LinearReg(LinRegSlope(C ,OPT3),50)CLOSE SHORT:C>Mov(C,OPT1,S) OR LinRegSlope(C,OPT2)>LinearReg(LinRegSlope(C ,OPT3),50)OPTIMIZE:OPT1: Minimum 5 Maximum 50 Step 5OPT2: Minimum 5 Maximum 50 Step 5OPT3: Minimum 5 Maximum 50 Step 5Initial Equity: Any amount.Positions: Long and ShortTrade Price: CloseTrade delay: 0 
+
+---PAGE BREAK---

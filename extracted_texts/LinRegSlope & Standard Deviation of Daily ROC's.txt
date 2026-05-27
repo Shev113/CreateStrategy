@@ -1,0 +1,6 @@
+Title:  LinRegSlope & Standard Deviation of Daily ROC'sDate:  7 июня 2010 г. 18:03Category:  Tags:  LinRegSlope & Standard Deviation of Daily ROC'swatch:= 63; {lookback period}ttt:=252; {projection periods}mmm:=LinRegSlope( Log(C), watch ); {LinRegSlope}sss:=Stdev(ROC(Log(C),1,$),watch); {StandardDeviation of daily ROCs}ra:=(Exp(mmm*ttt-2*sss*Sqrt(ttt))-1)*100; {Projection -2SD;"risk averse"}pe:=(Exp(mmm*ttt- sss*Sqrt(ttt))-1)*100; {Projection -1SD;"pessimistic"}ne:=(Exp(mmm*ttt )-1)*100; {neutral}op:=(Exp(mmm*ttt+ sss*Sqrt(ttt))-1)*100; {Projection +1SD;"optimistic"}ra; {to display} 
+
+---PAGE BREAK---
+LinRegSlope & Standard Deviation of Daily ROC'swatch:= 63; {lookback period}ttt:=252; {projection periods}mmm:=LinRegSlope( Log(C), watch ); {LinRegSlope}sss:=Stdev(ROC(Log(C),1,$),watch); {StandardDeviation of daily ROCs}ra:=(Exp(mmm*ttt-2*sss*Sqrt(ttt))-1)*100; {Projection -2SD;"risk averse"}pe:=(Exp(mmm*ttt- sss*Sqrt(ttt))-1)*100; {Projection -1SD;"pessimistic"}ne:=(Exp(mmm*ttt )-1)*100; {neutral}op:=(Exp(mmm*ttt+ sss*Sqrt(ttt))-1)*100; {Projection +1SD;"optimistic"}ra; {to display} 
+
+---PAGE BREAK---
