@@ -3,7 +3,7 @@ import json
 import os
 
 FAVORITES_PATH = os.path.join('results', 'favorites.json')
-INT_KEYS = {'min_hits', 'max_hold', 'rsi_period', 'entry_type', 'fisher_period', 'trend_period', 'lookback', 'smooth1', 'smooth2', 'smooth3', 'vol_period', 'cog_period', 'tsi_roc', 'tsi_smooth', 'tsi_signal', 'eco_ave1', 'eco_ave2', 'eco_ave3', 'psych_period', 'hv_fast', 'hv_slow', 'tcf_period', 'adjust_method', 'tether_period', 'tether_vol_period', 'tether_ma_fast', 'tether_ma_slow', 'reg_period', 'fear_period', 'dx_period'}
+INT_KEYS = {'min_hits', 'max_hold', 'rsi_period', 'entry_type', 'fisher_period', 'trend_period', 'lookback', 'smooth1', 'smooth2', 'smooth3', 'vol_period', 'cog_period', 'tsi_roc', 'tsi_smooth', 'tsi_signal', 'eco_ave1', 'eco_ave2', 'eco_ave3', 'psych_period', 'hv_fast', 'hv_slow', 'tcf_period', 'adjust_method', 'tether_period', 'tether_vol_period', 'tether_ma_fast', 'tether_ma_slow', 'reg_period', 'fear_period', 'dx_period', 'j2l_period', 'ma_rs_rsi', 'ma_rs_fast', 'ma_rs_slow', 'rmta_period', 'fazola_ema', 'fazola_roc_fast', 'fazola_roc_slow', 'ifish_rsi_period', 'ifish_wma_period', 'progo_period'}
 
 
 def normalize_numeric_params(params):
