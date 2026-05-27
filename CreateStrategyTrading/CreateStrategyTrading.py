@@ -448,12 +448,12 @@ class CreateStrategyApp:
     def _on_backtest_complete(self, trades, metrics,
                               selected_stock, signal=None, params=None, engine=None):
         self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
-        self.app.display_backtest_results(metrics)
+        self.app.display_backtest_results(metrics, params)
         self.app.enable_save_results_button()
         if params and 'capital' in params:
             self._last_capital = params['capital']
         if signal:
-            self.app.display_recommendation(signal)
+            self.app.display_recommendation(signal, params)
             self.app.set_last_analysis(signal, params)
         engine_levels = engine.last_levels if engine else []
         if signal:
@@ -909,6 +909,9 @@ if __name__ == "__main__":
         """Точка входа приложения"""
         root = tk.Tk()
         app = CreateStrategyApp(root)
-        root.mainloop()
+        try:
+            root.mainloop()
+        except KeyboardInterrupt:
+            app._on_close()
 
     main()

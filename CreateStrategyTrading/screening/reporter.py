@@ -95,7 +95,7 @@ def generate_report(all_results, top_n=5, params=None):
         last_candles = params.get('last_candles', '--')
         lines.append(
             f"  Параметры: ATR_SL={atr_sl} | ATR_TP={atr_tp} | Риск={risk_pct} | "
-            f"Мин.повторов={min_hits} | Капитал={capital_str} | Позиция={pos_size_str} | "
+            f"Мин.повторов={min_hits} | Капитал={capital_str} | Риск,₽={pos_size_str} | "
             f"Свежесть={last_candles}"
         )
     else:
@@ -162,18 +162,23 @@ def generate_report(all_results, top_n=5, params=None):
 
             capital = params.get('capital', 1_000_000) if params else 1_000_000
             risk = params.get('risk_per_trade', 0.02) if params else 0.02
-            pos_size = capital * risk
-            pos_text = f" {pos_size:,.0f}₽" if action in ('BUY', 'SELL') else ''
+            risk_amount = capital * risk
 
             direction = f"{action_text} {level_part} {wait_part}".strip()
             sl_tp = f"{sl_part} {tp_part}".strip()
             if sl_tp:
                 sl_tp = f" [{sl_tp}]"
 
+            vol_text = ''
+            if action in ('BUY', 'SELL') and level and sl_price:
+                sl_dist = abs(float(level) - float(sl_price)) / float(level)
+                if sl_dist > 0:
+                    vol_text = f" {risk_amount / sl_dist:,.0f}₽"
+
             lines.append(
                 f"  {r['ticker']:<6s} {direction:<30s} {stars:>7s}  "
                 f"Ret:{ret_s:>7s}  WR:{wr_s:>4s}  PF:{pf_s:>4s}  "
-                f"({nt:>2d} сд.){pos_text}{sl_tp}"
+                f"({nt:>2d} сд.){vol_text}{sl_tp}"
             )
 
         lines.append("")
@@ -197,7 +202,7 @@ def generate_report(all_results, top_n=5, params=None):
     else:
         capital = params.get('capital', 1_000_000) if params else 1_000_000
         risk = params.get('risk_per_trade', 0.02) if params else 0.02
-        pos_size = capital * risk
+        risk_amount = capital * risk
 
         for i, (score, r) in enumerate(top, 1):
             m = r['metrics']
@@ -211,14 +216,18 @@ def generate_report(all_results, top_n=5, params=None):
             tp_price = sig.get('tp_price', '')
             level_text = f"от {level}" if level and sig.get('action') in ('BUY', 'SELL') else ''
             sl_tp_text = f"SL={sl_price} TP={tp_price}" if sl_price and tp_price and sig.get('action') in ('BUY', 'SELL') else ''
-            pos_text = f"Сумма={pos_size:,.0f}₽" if sig.get('action') in ('BUY', 'SELL') else ''
+            vol_text = ''
+            if sig.get('action') in ('BUY', 'SELL') and level and sl_price:
+                sl_dist = abs(float(level) - float(sl_price)) / float(level)
+                if sl_dist > 0:
+                    vol_text = f"Объём={risk_amount / sl_dist:,.0f}₽"
             ret = m.get('total_return', 0)
             ret_s = f"{ret:+.1f}%" if isinstance(ret, (int, float)) else "0%"
 
             lines.append(
                 f"  {i}. {r['ticker']:<5s} {r['sector']:<18s} "
                 f"{arrow} {level_text:<15s} {stars:>7s}  "
-                f"Ret:{ret_s:>7s}  {pos_text}  {sl_tp_text}"
+                f"Ret:{ret_s:>7s}  {vol_text}  {sl_tp_text}"
             )
 
     lines.append("=" * 75)

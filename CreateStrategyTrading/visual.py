@@ -417,7 +417,7 @@ class StockAppVisual:
         self.backtest_text.delete(1.0, tk.END)
         self.backtest_text.insert(tk.END, text)
 
-    def display_backtest_results(self, metrics):
+    def display_backtest_results(self, metrics, params=None):
         lines = [
             "========== РЕЗУЛЬТАТЫ BACKTEST ==========",
             f"Начальный капитал: {metrics['initial_capital']:,.0f} руб",
@@ -433,8 +433,13 @@ class StockAppVisual:
             "",
             f"Средняя прибыль:    {metrics['avg_win']:+.2f} руб" if metrics.get('avg_win') else "",
             f"Средний убыток:     {metrics['avg_loss']:+.2f} руб" if metrics.get('avg_loss') else "",
-            "=========================================="
         ]
+        if params:
+            capital = params.get('capital', 1_000_000)
+            risk = params.get('risk_per_trade', 0.02)
+            risk_amount = capital * risk
+            lines.append(f"Риск на сделку:     {risk_amount:,.0f} руб")
+        lines.append("==========================================")
         self.add_backtest_result('\n'.join(lines))
 
     def _show_settings(self):
@@ -449,7 +454,7 @@ class StockAppVisual:
         else:
             self.diary_btn.config(state='disabled')
 
-    def display_recommendation(self, signal):
+    def display_recommendation(self, signal, params=None):
         action = signal.get('action', 'NONE')
         if action == 'NONE':
             self.backtest_text.insert(tk.END, '\n\n========== РЕКОМЕНДАЦИЯ ==========\nНет сигнала\n====================================')
@@ -472,8 +477,15 @@ class StockAppVisual:
             f'Уровень: {level:.2f} {stars}  (дист. {dist:.2f})',
             f'Посл. цена: {last_price:.2f}',
             f'SL: {sl:.2f} | TP: {tp:.2f}',
-            '===================================='
         ]
+        if params and level and sl:
+            capital = params.get('capital', 1_000_000)
+            risk = params.get('risk_per_trade', 0.02)
+            risk_amount = capital * risk
+            sl_dist = abs(float(level) - float(sl)) / float(level)
+            if sl_dist > 0:
+                lines.append(f'Объём позиции: {risk_amount / sl_dist:,.0f} руб')
+        lines.append('====================================')
         self.backtest_text.insert(tk.END, '\n'.join(lines))
 
     def _get_strategy_id(self):
