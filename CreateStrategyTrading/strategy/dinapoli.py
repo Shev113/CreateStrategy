@@ -26,6 +26,7 @@ def check_dinapoli(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0,
 
     highs = []
     lows = []
+    closes = []
     for j in range(lookback, idx + 1):
         if candles[j] is not None and len(candles[j]) >= 4:
             highs.append(float(candles[j][2]))

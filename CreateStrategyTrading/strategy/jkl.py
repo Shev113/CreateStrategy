@@ -23,6 +23,7 @@ def check_jkl(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0,
     _, close, high, low = float(c[0]), float(c[1]), float(c[2]), float(c[3])
 
     opens = []
+    closes = []
     for j in range(lookback, idx + 1):
         if candles[j] is not None and len(candles[j]) >= 4:
             opens.append(float(candles[j][0]))
