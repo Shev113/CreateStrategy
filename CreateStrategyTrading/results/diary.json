@@ -72,11 +72,11 @@
     "tp_price": 318.48,
     "volume": 48564.06,
     "qty": 156.25,
-    "status": "open",
-    "exit_price": null,
-    "exit_date": null,
-    "exit_reason": null,
-    "pnl": null,
+    "status": "closed",
+    "exit_price": 306.97,
+    "exit_date": "2026-05-28 23:13",
+    "exit_reason": "SL",
+    "pnl": -600.0,
     "max_hold": 20
   },
   {
@@ -88,11 +88,11 @@
     "tp_price": 422.91,
     "volume": 33811.26,
     "qty": 108.3,
-    "status": "open",
-    "exit_price": null,
-    "exit_date": null,
-    "exit_reason": null,
-    "pnl": null,
+    "status": "closed",
+    "exit_price": 306.66,
+    "exit_date": "2026-05-28 23:13",
+    "exit_reason": "SL",
+    "pnl": -599.98,
     "max_hold": 20
   }
 ]

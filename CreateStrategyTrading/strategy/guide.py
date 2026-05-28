@@ -351,6 +351,77 @@ STRATEGY_GUIDE = {
         ),
         'example_params': 'coppock_roc1=11, coppock_roc2=14, coppock_wma=10',
     },
+    'dual_thrust': {
+        'author': 'Michael Chalek',
+        'source': 'Библиотека стратегий (WLD - Dual Thrust.pdf)',
+        'logic': (
+            'Dual Thrust — breakout-система на основе вчерашнего диапазона. '
+            'Range = max(HHV - LC, HC - LLV). '
+            'BuyLine = Open + K1×Range, SellLine = Open - K2×Range. '
+            'Пробой BuyLine = покупка, пробой SellLine = продажа. '
+            'K1 > K2 — легче открыть лонг, K1 < K2 — легче открыть шорт.'
+        ),
+        'example_params': 'dt_lookback=20, dt_k1=0.7, dt_k2=0.7',
+    },
+    'system_d': {
+        'author': 'George Pruitt',
+        'source': 'Библиотека стратегий (OMEGA - SystemD by George Pruitt.pdf)',
+        'logic': (
+            'SystemD — трендовая система на основе пересечения быстрой и медленной EMA '
+            '(5/20) с фильтром волатильности. '
+            'FastEMA > SlowEMA + Range <= vol_factor × avg_range = лонг. '
+            'FastEMA < SlowEMA + Range <= vol_factor × avg_range = шорт. '
+            'Фильтр волатильности отсеивает сделки в хаотичном рынке.'
+        ),
+        'example_params': 'sd_fast_ma=5, sd_slow_ma=20, sd_vol_factor=1.5',
+    },
+    'lunar_cycle': {
+        'author': 'Jose Silva',
+        'source': 'Библиотека стратегий (Lunar Cycle by Jose Silva.pdf)',
+        'logic': (
+            'Лунный цикл Хосе Сильвы — торговля по фазам луны (синодический месяц 29.53 дня). '
+            'Фаза = FM - NM, где FullMoon и NewMoon расcчитываются через Julian day. '
+            'BUY: фаза ≥ 0.4 (около Full Moon) у поддержки. '
+            'SELL: фаза ≤ -0.4 (около New Moon) у сопротивления.'
+        ),
+        'example_params': 'lc_offset=4.86, lc_timezone=3, lc_phase_shift=0',
+    },
+    'dyn_breakout': {
+        'author': 'George Pruitt',
+        'source': 'Библиотека стратегий (Dynamic BreakOut System I.pdf)',
+        'logic': (
+            'Dynamic BreakOut I — адаптивный пробой канала с Bollinger Bands. '
+            'Lookback = базовый × (1 + deltaVolatility). '
+            'BUY: close > HHV(adaptive) AND close > BB upper у поддержки. '
+            'SELL: close < LLV(adaptive) AND close < BB lower у сопротивления. '
+            'Волатильность StdDev(close,30) — при росте волатильности период увеличивается.'
+        ),
+        'example_params': 'dbo_lookback=20, dbo_vol_lookback=30, dbo_bb_mult=2.0',
+    },
+    'bb_macd': {
+        'author': 'N.N.',
+        'source': 'Библиотека стратегий (Bollinger Band of MACD.pdf)',
+        'logic': (
+            'Bollinger Bands, построенные на линии MACD. '
+            'MACD = EMA(close, fast) - EMA(close, slow). '
+            'Signal = EMA(MACD, signal). BB на MACD: ±2 StdDev за период. '
+            'BUY: MACD < BB lower AND MACD > Signal (crossover) у поддержки. '
+            'SELL: MACD > BB upper AND MACD < Signal у сопротивления.'
+        ),
+        'example_params': 'bbm_macd_fast=12, bbm_macd_slow=26, bbm_bb_period=20',
+    },
+    'base_channel': {
+        'author': 'N.N.',
+        'source': 'Библиотека стратегий (Base Channel System.pdf)',
+        'logic': (
+            'Base Channel — канал HHV/LLV с адаптивной шириной через StdDev. '
+            'BaseFactor = 1 + (curStd - prevStd) / curStd. '
+            'ChannelWidth = BaseFactor × StdDev(close, period). '
+            'BUY: close > HHV AND close > upper channel у поддержки. '
+            'SELL: close < LLV AND close < lower channel у сопротивления.'
+        ),
+        'example_params': 'bc_period=20, bc_vol_period=30',
+    },
 }
 
 
