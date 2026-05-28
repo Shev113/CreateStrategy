@@ -857,10 +857,14 @@ class CreateStrategyApp:
 
         win = tk.Toplevel(self.root)
         win.title('Индивидуальные настройки бумаг')
-        win.geometry('700x500')
-        text = tk.Text(win, wrap=tk.NONE, font=('Consolas', 10))
-        text.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
-        scroll_y = tk.Scrollbar(win, orient='vertical', command=text.yview)
+        win.geometry('700x550')
+
+        text_frame = ttk.Frame(win)
+        text_frame.pack(fill=tk.BOTH, expand=1, padx=5, pady=(5, 0))
+
+        text = tk.Text(text_frame, wrap=tk.NONE, font=('Consolas', 10))
+        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll_y = tk.Scrollbar(text_frame, orient='vertical', command=text.yview)
         scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
         text.configure(yscrollcommand=scroll_y.set)
 
@@ -875,6 +879,58 @@ class CreateStrategyApp:
             content.append('')
         text.insert('1.0', '\n'.join(content))
         text.configure(state='disabled')
+
+        btn_frame = ttk.Frame(win)
+        btn_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(btn_frame, text='Экспорт JSON',
+                   command=lambda: self._export_ticker_settings(data, win)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Импорт JSON',
+                   command=lambda: self._import_ticker_settings(data, win, name_map)).pack(side=tk.LEFT, padx=2)
+
+    def _export_ticker_settings(self, data, win):
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            defaultextension='.json',
+            filetypes=[('JSON', '*.json')],
+            title='Экспорт настроек бумаг'
+        )
+        if not path:
+            return
+        try:
+            import json
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            mb.showinfo('Экспорт', f'Настройки сохранены:\n{path}')
+        except Exception as e:
+            mb.showerror('Ошибка', f'Не удалось экспортировать:\n{e}')
+
+    def _import_ticker_settings(self, current_data, win, name_map):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            defaultextension='.json',
+            filetypes=[('JSON', '*.json')],
+            title='Импорт настроек бумаг'
+        )
+        if not path:
+            return
+        try:
+            import json
+            with open(path, 'r', encoding='utf-8') as f:
+                imported = json.load(f)
+            if not isinstance(imported, dict):
+                mb.showerror('Ошибка', 'Неверный формат файла.')
+                return
+            merged = dict(current_data)
+            merged.update(imported)
+            settings_path = os.path.join('results', 'ticker_settings.json')
+            with open(settings_path, 'w', encoding='utf-8') as f:
+                json.dump(merged, f, ensure_ascii=False, indent=2)
+            mb.showinfo('Импорт',
+                        f'Импортировано настроек: {len(imported)} бумаг.\n'
+                        'Закройте и откройте окно заново для просмотра.')
+        except Exception as e:
+            mb.showerror('Ошибка', f'Не удалось импортировать:\n{e}')
 
     def on_check_positions(self) -> None:
         """Проверить открытые позиции — закрыть по SL/TP"""

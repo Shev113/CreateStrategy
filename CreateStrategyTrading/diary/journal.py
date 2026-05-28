@@ -194,3 +194,35 @@ class DiaryStorage:
         if updated:
             self.save(entries)
         return updated
+
+    def export_json(self, export_path):
+        entries = self.load()
+        os.makedirs(os.path.dirname(export_path), exist_ok=True)
+        with open(export_path, 'w', encoding='utf-8') as f:
+            json.dump([asdict(e) for e in entries], f,
+                      ensure_ascii=False, indent=2)
+
+    def import_json(self, import_path, merge=True):
+        if not os.path.exists(import_path):
+            return 0
+        with open(import_path, 'r', encoding='utf-8') as f:
+            imported = json.load(f)
+        if not isinstance(imported, list):
+            return 0
+        new_entries = [_entry_from_dict(d) for d in imported]
+        if not new_entries:
+            return 0
+        if merge:
+            current = self.load()
+            existing_keys = {(e.date, e.ticker, e.side, round(e.entry_price, 2))
+                            for e in current}
+            added = [e for e in new_entries
+                     if (e.date, e.ticker, e.side, round(e.entry_price, 2)) not in existing_keys]
+            if not added:
+                return 0
+            current.extend(added)
+            self.save(current)
+            return len(added)
+        else:
+            self.save(new_entries)
+            return len(new_entries)

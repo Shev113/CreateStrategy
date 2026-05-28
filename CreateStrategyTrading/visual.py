@@ -1268,6 +1268,10 @@ class DiaryUI:
                    command=self._close_selected).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text='Экспорт CSV',
                    command=self._export_csv).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Экспорт JSON',
+                   command=self._export_json).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Импорт JSON',
+                   command=self._import_json).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text='Обновить',
                    command=self.refresh).pack(side=tk.LEFT, padx=2)
 
@@ -1333,6 +1337,44 @@ class DiaryUI:
                 ])
         import tkinter.messagebox as mb
         mb.showinfo('Экспорт', f'Дневник сохранён:\n{path}')
+
+    def _export_json(self):
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            defaultextension='.json',
+            filetypes=[('JSON', '*.json')],
+            title='Экспорт дневника'
+        )
+        if not path:
+            return
+        try:
+            self.storage.export_json(path)
+            import tkinter.messagebox as mb
+            mb.showinfo('Экспорт', f'Дневник экспортирован:\n{path}')
+        except Exception as e:
+            import tkinter.messagebox as mb
+            mb.showerror('Ошибка', f'Не удалось экспортировать:\n{e}')
+
+    def _import_json(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            defaultextension='.json',
+            filetypes=[('JSON', '*.json')],
+            title='Импорт дневника'
+        )
+        if not path:
+            return
+        try:
+            added = self.storage.import_json(path, merge=True)
+            self.refresh()
+            import tkinter.messagebox as mb
+            if added:
+                mb.showinfo('Импорт', f'Добавлено записей: {added}')
+            else:
+                mb.showinfo('Импорт', 'Новых записей не найдено.')
+        except Exception as e:
+            import tkinter.messagebox as mb
+            mb.showerror('Ошибка', f'Не удалось импортировать:\n{e}')
 
 
 class StrategyGuideUI:
