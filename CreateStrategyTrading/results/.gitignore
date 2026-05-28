@@ -1,0 +1,7 @@
+# Cache and auto-generated — not tracked
+moex_sectors_cache.json
+session_state.json
+summary_*.json
+trades_*.csv
+smart_scanner_*.xlsx
+~$*
