@@ -12,7 +12,8 @@
     "exit_price": null,
     "exit_date": null,
     "exit_reason": null,
-    "pnl": null
+    "pnl": null,
+    "max_hold": 20
   },
   {
     "date": "2026-05-25 13:32",
@@ -27,7 +28,8 @@
     "exit_price": null,
     "exit_date": null,
     "exit_reason": null,
-    "pnl": null
+    "pnl": null,
+    "max_hold": 20
   },
   {
     "date": "2026-05-26 09:08",
@@ -38,11 +40,12 @@
     "tp_price": 314.53,
     "volume": 65831.68,
     "qty": 205.48,
-    "status": "open",
-    "exit_price": null,
-    "exit_date": null,
-    "exit_reason": null,
-    "pnl": null
+    "status": "closed",
+    "exit_price": 323.3,
+    "exit_date": "2026-05-28 20:21",
+    "exit_reason": "SL",
+    "pnl": -600.0,
+    "max_hold": 20
   },
   {
     "date": "2026-05-26 09:17",
@@ -53,11 +56,12 @@
     "tp_price": 23451.43,
     "volume": 22302.0,
     "qty": 0.9,
-    "status": "open",
-    "exit_price": null,
-    "exit_date": null,
-    "exit_reason": null,
-    "pnl": null
+    "status": "closed",
+    "exit_price": 25444.29,
+    "exit_date": "2026-05-28 20:21",
+    "exit_reason": "SL",
+    "pnl": -597.86,
+    "max_hold": 20
   },
   {
     "date": "2026-05-27 11:03",
@@ -72,7 +76,8 @@
     "exit_price": null,
     "exit_date": null,
     "exit_reason": null,
-    "pnl": null
+    "pnl": null,
+    "max_hold": 20
   },
   {
     "date": "2026-05-27 12:23",
@@ -87,6 +92,7 @@
     "exit_price": null,
     "exit_date": null,
     "exit_reason": null,
-    "pnl": null
+    "pnl": null,
+    "max_hold": 20
   }
 ]

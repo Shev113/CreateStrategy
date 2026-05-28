@@ -275,6 +275,82 @@ STRATEGY_GUIDE = {
         ),
         'example_params': 'progo_period=7, OB=75, OS=25',
     },
+    'siroc': {
+        'author': 'Jose Silva',
+        'source': 'Библиотека стратегий (Siroc IV by Jose Silva.pdf)',
+        'logic': (
+            'Siroc IV — нормализованный ROC-осциллятор с автоматическими уровнями '
+            'перекупленности/перепроданности на основе исторических пиков/впадин. '
+            'Расчёт: y = EMA(MP, prd1), z = EMA((MP-y)/y[-prd1], prd2). '
+            'Siroc = 100 × EMA(up,prd3) / (EMA(up,prd3)+EMA(down,prd3)). '
+            'Сигнальная линия dTrigger = EMA(Siroc, prd3). '
+            'BUY: Siroc пересекает dTrigger снизу вверх у поддержки. '
+            'SELL: Siroc пересекает dTrigger сверху вниз у сопротивления.'
+        ),
+        'example_params': 'prd1=21, prd2=10, prd3=5',
+    },
+    'jkl': {
+        'author': 'Jarosław Kilon',
+        'source': 'Библиотека стратегий (JKL Trading System by Jarosław Kilon.pdf)',
+        'logic': (
+            'JKL — взвешенная по стандартному отклонению скользящая средняя '
+            'цены (O+C)/2. Веса = StdDev(mid, opt2). '
+            'X = Sum(w × mid, opt2) / Sum(w, opt2), MA_X = SMA(X, opt3). '
+            'Сигнал = X - MA_X. '
+            'BUY: сигнал > порог (opt1) у поддержки. '
+            'SELL: сигнал < порог у сопротивления.'
+        ),
+        'example_params': 'opt1=0, opt2=5, opt3=15',
+    },
+    'cci_ma': {
+        'author': 'N.N.',
+        'source': 'Библиотека стратегий (CCI Moving Average Crossover System Test.pdf)',
+        'logic': (
+            'CCI пересекает свою EMA. '
+            'CCI = (TP - SMA(TP, period)) / (0.015 × MeanDeviation). '
+            'Mean-reversion подход: когда CCI падает ниже своей EMA — перепроданность (BUY), '
+            'когда CCI растёт выше EMA — перекупленность (SELL). '
+            'BUY: CCI пересекает EMA снизу вверх у поддержки. '
+            'SELL: CCI пересекает EMA сверху вниз у сопротивления.'
+        ),
+        'example_params': 'cci_period=14, cci_ma_period=14',
+    },
+    'trend_osc': {
+        'author': 'N.N.',
+        'source': 'Библиотека стратегий (Combining Trend and Oscillator Signals.pdf)',
+        'logic': (
+            'Комбинация трендового фильтра (C > SMA) и осциллятора (LinRegSlope > своей '
+            'долгосрочной регрессии). Трендовый фильтр определяет направление, '
+            'осциллятор подтверждает ускорение/замедление импульса. '
+            'BUY: C > EMA(ma) AND LinRegSlope > smoothed slope у поддержки. '
+            'SELL: C < EMA(ma) AND LinRegSlope < smoothed slope у сопротивления.'
+        ),
+        'example_params': 'trend_osc_ma=20, trend_osc_slope=14, trend_osc_smooth=50',
+    },
+    'dinapoli': {
+        'author': 'Joe DiNapoli',
+        'source': 'Библиотека стратегий (Preferred (Slow) Oscillator by Joe DiNapoli.pdf)',
+        'logic': (
+            'Preferred Slow Oscillator ДиНаполи — двойное сглаживание стохастика '
+            '(8,3,3). FK = 8-периодный %K, FD = EMA(FK,3), STO = EMA(FD,3). '
+            'Двойное сглаживание убирает шум и даёт чёткие сигналы на экстремумах. '
+            'BUY: STO пересекает oversold (30) снизу вверх у поддержки. '
+            'SELL: STO пересекает overbought (70) сверху вниз у сопротивления.'
+        ),
+        'example_params': 'K=8, D=3, Slow=3, OB=70, OS=30',
+    },
+    'coppock': {
+        'author': 'Edwin Coppock',
+        'source': 'Библиотека стратегий (Coppock Indicator.pdf, Coppock Curve - Signal Formulas.pdf)',
+        'logic': (
+            'Coppock Curve — долгосрочный индикатор для поиска крупных bottoms. '
+            'WMA(10) от суммы ROC(11) + ROC(14). Рост кривой указывает на '
+            'ослабление нисходящего импульса и возможный разворот. '
+            'BUY: Coppock растёт (current > prev) у поддержки. '
+            'SELL: Coppock падает (current < prev) у сопротивления.'
+        ),
+        'example_params': 'coppock_roc1=11, coppock_roc2=14, coppock_wma=10',
+    },
 }
 
 
