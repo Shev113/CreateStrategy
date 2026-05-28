@@ -84,6 +84,7 @@ class CreateStrategyApp:
         self._start_auto_load_tickers()
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
         self.bind_events()
+        self.root.after(1000, self._auto_check_positions)
 
     def candles_to_df_custom(self, candles_list: list) -> pd.DataFrame | None:
         """Конвертация списка свечей в DataFrame"""
@@ -946,6 +947,25 @@ class CreateStrategyApp:
                 logging.exception('Check positions error')
 
         self.diary_ui.refresh()
+        t = threading.Thread(target=task, daemon=True)
+        t.start()
+
+    def _auto_check_positions(self):
+        open_entries = self.diary_storage.get_open_entries()
+        if not open_entries:
+            return
+
+        def task():
+            try:
+                updated = self.diary_storage.check_positions(self.get_stock_data)
+                if updated:
+                    self.root.after(0, lambda: self.diary_ui.refresh())
+                    self.root.after(0, lambda: mb.showinfo(
+                        'Автопроверка',
+                        f'Закрыто по SL/TP/TIMEOUT: {updated} сделок.'))
+            except Exception:
+                logging.exception('Auto check positions error')
+
         t = threading.Thread(target=task, daemon=True)
         t.start()
 
