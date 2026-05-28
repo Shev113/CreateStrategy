@@ -1,0 +1,98 @@
+{
+  "AFLT": {
+    "strategy": "bounce",
+    "params": {
+      "capital": 1000000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 5,
+      "max_hold": 20,
+      "commission": 0.05,
+      "entry_type": 0
+    }
+  },
+  "GAZP": {
+    "strategy": "rsi_levels",
+    "params": {
+      "capital": 1000000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 5,
+      "max_hold": 50,
+      "commission": 0.05,
+      "rsi_period": 14,
+      "rsi_oversold": 30.0,
+      "rsi_overbought": 70.0,
+      "level_proximity": 0.5,
+      "entry_type": 0
+    }
+  },
+  "MRKY": {
+    "strategy": "bounce",
+    "params": {
+      "capital": 30000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 10,
+      "max_hold": 30,
+      "commission": 0.05,
+      "last_candles": 20
+    }
+  },
+  "SBER": {
+    "strategy": "breakout",
+    "params": {
+      "capital": 1000000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 5,
+      "max_hold": 30,
+      "commission": 0.05,
+      "breakout_threshold": 0.3,
+      "entry_type": 0
+    }
+  },
+  "ALRS": {
+    "strategy": "breakout",
+    "params": {
+      "capital": 30000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 20,
+      "max_hold": 20,
+      "commission": 0.05,
+      "breakout_threshold": 0.3
+    }
+  },
+  "VSMO": {
+    "strategy": "bounce",
+    "params": {
+      "capital": 30000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 5,
+      "max_hold": 20,
+      "commission": 0.05,
+      "entry_type": 0
+    }
+  },
+  "BSPB": {
+    "strategy": "bounce",
+    "params": {
+      "capital": 30000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 20.0,
+      "min_hits": 5,
+      "max_hold": 10,
+      "commission": 0.05,
+      "entry_type": 0
+    }
+  }
+}

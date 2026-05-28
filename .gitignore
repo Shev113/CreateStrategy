@@ -20,8 +20,11 @@ venv/
 # Logs
 *.log
 
-# Results (generated data)
-results/
+# Results — track data (diary, settings, favorites), exclude cache/export
+results/moex_sectors_cache.json
+results/session_state.json
+results/summary_*.json
+results/diary_*.csv
 
 # OS
 Thumbs.db
