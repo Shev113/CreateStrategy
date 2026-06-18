@@ -9,3 +9,5 @@
 2026-06-08 18:58:29,872 - root - WARNING - H1 fetch failed for FEES: HTTPSConnectionPool(host='iss.moex.com', port=443): Read timed out. (read timeout=15)
 2026-06-08 19:01:09,104 - root - WARNING - H1 fetch failed for UWGN: ('Connection aborted.', ConnectionResetError(10054, 'Удаленный хост принудительно разорвал существующее подключение', None, 10054, None))
 2026-06-08 21:02:50,036 - root - WARNING - H1 fetch failed for RASP: ('Connection aborted.', ConnectionResetError(10054, 'Удаленный хост принудительно разорвал существующее подключение', None, 10054, None))
+2026-06-18 13:50:24,805 - root - ERROR - Ошибка HTTP: 502 Server Error: Bad Gateway for url: https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/GAZP/candles.json?start=0&till=2016-12-31&from=2015-01-01&interval=24
+2026-06-18 13:50:54,595 - matplotlib.font_manager - INFO - generated new fontManager

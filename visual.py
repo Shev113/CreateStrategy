@@ -112,7 +112,7 @@ class StockAppVisual:
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
         parent.grid_rowconfigure(3, weight=1)
-        parent.grid_rowconfigure(11, weight=2)
+        parent.grid_rowconfigure(10, weight=2)
 
         self.result_text = tk.Text(parent, height=6, width=55)
         self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
@@ -120,72 +120,65 @@ class StockAppVisual:
 
         self.get_data_button = ttk.Button(
             parent, text="1. Получить данные", command=on_select)
-        self.get_data_button.grid(row=4, column=0, columnspan=2, pady=2)
-
-        export_button = ttk.Button(
-            parent, text="Экспорт данных", command=on_export_button)
-        export_button.grid(row=5, column=0, columnspan=2, pady=2)
+        self.get_data_button.grid(row=4, column=0, columnspan=2, pady=1)
 
         # Стратегия
         from strategy.config import get_strategy_names
         self._strategy_names = get_strategy_names()
         self._strategy_id_map = {name: sid for sid, name in self._strategy_names}
 
-        ttk.Separator(parent, orient='horizontal').grid(
-            row=6, column=0, columnspan=2, sticky='ew', pady=5)
-
         ttk.Label(parent, text="Стратегия:",
-                  font=('', 10, 'bold')).grid(row=7, column=0, padx=5, pady=(5, 0), sticky='w')
+                  font=('', 10, 'bold')).grid(row=5, column=0, padx=5, pady=(5, 0), sticky='w')
         self._strategy_combo = ttk.Combobox(parent, state='readonly', width=35)
         display_names = [name for sid, name in self._strategy_names]
         self._strategy_combo['values'] = display_names
         if display_names:
             self._strategy_combo.current(0)
-        self._strategy_combo.grid(row=7, column=1, padx=5, pady=(5, 0), sticky='w')
+        self._strategy_combo.grid(row=5, column=1, padx=5, pady=(5, 0), sticky='w')
         self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
 
         self._params_frame = ttk.Frame(parent)
-        self._params_frame.grid(row=8, column=0, columnspan=2, sticky='ew', padx=5, pady=2)
+        self._params_frame.grid(row=6, column=0, columnspan=2, sticky='ew', padx=5, pady=1)
 
         self._param_entries = {}
         self._rebuild_params()
 
         btn_row = ttk.Frame(parent)
-        btn_row.grid(row=9, column=0, columnspan=2, pady=2)
+        btn_row.grid(row=7, column=0, columnspan=2, pady=1)
 
         self.save_settings_btn = ttk.Button(
-            btn_row, text="Сохранить настройки",
+            btn_row, text="Настройки", width=10,
             command=lambda: self._save_current_settings())
-        self.save_settings_btn.pack(side=tk.LEFT, padx=5)
+        self.save_settings_btn.pack(side=tk.LEFT, padx=2)
 
         self.diary_btn = ttk.Button(
-            btn_row, text="В дневник",
+            btn_row, text="В дневник", width=9,
             command=lambda: on_diary() if on_diary else None)
-        self.diary_btn.pack(side=tk.LEFT, padx=5)
+        self.diary_btn.pack(side=tk.LEFT, padx=2)
         self.diary_btn.config(state='disabled')
 
         self._on_show_settings = on_show_settings
         self._settings_btn = ttk.Button(
-            btn_row, text="Индивид. настройки",
+            btn_row, text="Индивид.", width=9,
             command=lambda: self._show_settings())
-        self._settings_btn.pack(side=tk.LEFT, padx=5)
+        self._settings_btn.pack(side=tk.LEFT, padx=2)
 
         self._save_results_btn = ttk.Button(
-            btn_row, text="Сохранить результаты",
+            btn_row, text="Сохранить", width=9,
             command=lambda: on_save_results() if on_save_results else None)
-        self._save_results_btn.pack(side=tk.LEFT, padx=5)
+        self._save_results_btn.pack(side=tk.LEFT, padx=2)
         self._save_results_btn.config(state='disabled')
 
         self.backtest_button = ttk.Button(
             parent, text="2. Запустить Backtest", command=on_backtest)
-        self.backtest_button.grid(row=10, column=0, columnspan=2, pady=2)
+        self.backtest_button.grid(row=8, column=0, columnspan=2, pady=1)
 
         self.optimize_button = ttk.Button(
             parent, text="3. Оптимизация параметров", command=lambda: on_optimize() if on_optimize else None)
-        self.optimize_button.grid(row=11, column=0, columnspan=2, pady=2)
+        self.optimize_button.grid(row=9, column=0, columnspan=2, pady=1)
 
         self.backtest_text = tk.Text(parent, height=8, width=55)
-        self.backtest_text.grid(row=12, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.backtest_text.grid(row=10, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
 
     def enable_save_results_button(self):
