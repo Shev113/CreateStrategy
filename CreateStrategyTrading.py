@@ -705,7 +705,7 @@ class CreateStrategyApp:
 
     def _on_backtest_complete(self, trades, metrics,
                               selected_stock, signal=None, params=None, engine=None):
-        self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
+        self.app.backtest_button.config(state='normal', text='2. Backtest')
         self.app.display_backtest_results(metrics, params)
         self.app.enable_save_results_button()
         if params and 'capital' in params:
@@ -726,7 +726,7 @@ class CreateStrategyApp:
 
     def _on_backtest_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")
-        self.app.backtest_button.config(state='normal', text='2. Запустить Backtest')
+        self.app.backtest_button.config(state='normal', text='2. Backtest')
         logging.exception("Backtest error")
 
     def _on_save_results(self):
@@ -751,7 +751,7 @@ class CreateStrategyApp:
             self.app.add_backtest_result("Ошибка: проверьте числовые параметры.")
             return
 
-        self.app.backtest_button.config(state='disabled', text='Backtest запущен...')
+        self.app.backtest_button.config(state='disabled', text='Backtest...')
 
         t = threading.Thread(
             target=self._run_backtest_task,
@@ -795,7 +795,7 @@ class CreateStrategyApp:
         t.start()
 
     def _on_optimize_complete(self, results, total, strategy_id):
-        self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
+        self.app.optimize_button.config(state='normal', text='3. Оптимизация')
         from strategy.config import STRATEGY_REGISTRY
         strat_name = STRATEGY_REGISTRY.get(strategy_id, {}).get('name', strategy_id)
 
@@ -881,7 +881,7 @@ class CreateStrategyApp:
 
     def _on_optimize_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка оптимизации: {error_msg}")
-        self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
+        self.app.optimize_button.config(state='normal', text='3. Оптимизация')
 
     def on_walkforward(self) -> None:
         """Запуск Walk-forward анализа."""
@@ -899,7 +899,7 @@ class CreateStrategyApp:
 
         strategy_id = params.pop('strategy', 'bounce')
 
-        self.app.walkforward_button.config(state='disabled', text='Walk-forward...')
+        self.app.walkforward_button.config(state='disabled', text='Walk-fwd...')
         txt = self.app.backtest_text
         txt.delete(1.0, tk.END)
         txt.insert(tk.END, "Запуск Walk-forward анализа...\n")
@@ -926,14 +926,14 @@ class CreateStrategyApp:
         t.start()
 
     def _on_walkforward_complete(self, report):
-        self.app.walkforward_button.config(state='normal', text='5. Walk-forward')
+        self.app.walkforward_button.config(state='normal', text='5. Walk-fwd')
         txt = self.app.backtest_text
         txt.delete(1.0, tk.END)
         txt.insert(tk.END, report)
 
     def _on_walkforward_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка Walk-forward: {error_msg}")
-        self.app.walkforward_button.config(state='normal', text='5. Walk-forward')
+        self.app.walkforward_button.config(state='normal', text='5. Walk-fwd')
 
     def on_portfolio(self) -> None:
         """Портфельный бэктест по тикерам из торгового дневника."""
@@ -990,7 +990,7 @@ class CreateStrategyApp:
         t.start()
 
     def _on_portfolio_complete(self, result, strategy_id, errors):
-        self.app.portfolio_button.config(state='normal', text='4. Портфельный бэктест')
+        self.app.portfolio_button.config(state='normal', text='4. Портфель')
         pm = result['portfolio_metrics']
         txt = self.app.backtest_text
         txt.delete(1.0, tk.END)
@@ -1036,7 +1036,7 @@ class CreateStrategyApp:
 
     def _on_portfolio_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка портфельного бэктеста: {error_msg}")
-        self.app.portfolio_button.config(state='normal', text='4. Портфельный бэктест')
+        self.app.portfolio_button.config(state='normal', text='4. Портфель')
 
     def on_scanner(self) -> None:
         """Запуск сканера по секторам"""
