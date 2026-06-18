@@ -35,7 +35,7 @@ class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
-                 on_optimize=None,
+                 on_optimize=None, on_portfolio=None,
                  favorites=None, on_toggle_favorite=None,
                  sector_db=None):
         self.root = parent.winfo_toplevel()
@@ -112,7 +112,7 @@ class StockAppVisual:
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
         parent.grid_rowconfigure(3, weight=1)
-        parent.grid_rowconfigure(10, weight=2)
+        parent.grid_rowconfigure(12, weight=2)
 
         self.result_text = tk.Text(parent, height=6, width=55)
         self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
@@ -137,14 +137,20 @@ class StockAppVisual:
         self._strategy_combo.grid(row=5, column=1, padx=5, pady=(5, 0), sticky='w')
         self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
 
+        ttk.Label(parent, text="Портфель (тикеры):",
+                  font=('', 8)).grid(row=6, column=0, padx=5, pady=(2, 0), sticky='w')
+        self.portfolio_entry = ttk.Entry(parent, width=28, font=('', 8))
+        self.portfolio_entry.grid(row=6, column=1, padx=5, pady=(2, 0), sticky='w')
+        self.portfolio_entry.insert(0, '')
+
         self._params_frame = ttk.Frame(parent)
-        self._params_frame.grid(row=6, column=0, columnspan=2, sticky='ew', padx=5, pady=1)
+        self._params_frame.grid(row=7, column=0, columnspan=2, sticky='ew', padx=5, pady=1)
 
         self._param_entries = {}
         self._rebuild_params()
 
         btn_row = ttk.Frame(parent)
-        btn_row.grid(row=7, column=0, columnspan=2, pady=1)
+        btn_row.grid(row=8, column=0, columnspan=2, pady=1)
 
         self.save_settings_btn = ttk.Button(
             btn_row, text="Настройки", width=10,
@@ -171,14 +177,18 @@ class StockAppVisual:
 
         self.backtest_button = ttk.Button(
             parent, text="2. Запустить Backtest", command=on_backtest)
-        self.backtest_button.grid(row=8, column=0, columnspan=2, pady=1)
+        self.backtest_button.grid(row=9, column=0, columnspan=2, pady=1)
 
         self.optimize_button = ttk.Button(
             parent, text="3. Оптимизация параметров", command=lambda: on_optimize() if on_optimize else None)
-        self.optimize_button.grid(row=9, column=0, columnspan=2, pady=1)
+        self.optimize_button.grid(row=10, column=0, columnspan=2, pady=1)
+
+        self.portfolio_button = ttk.Button(
+            parent, text="4. Портфельный бэктест", command=lambda: on_portfolio() if on_portfolio else None)
+        self.portfolio_button.grid(row=11, column=0, columnspan=2, pady=1)
 
         self.backtest_text = tk.Text(parent, height=8, width=55)
-        self.backtest_text.grid(row=10, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.backtest_text.grid(row=12, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
 
     def enable_save_results_button(self):

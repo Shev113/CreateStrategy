@@ -183,6 +183,7 @@ class CreateStrategyApp:
             on_show_settings=self.on_show_ticker_settings,
             on_save_results=self._on_save_results,
             on_optimize=self.on_optimize,
+            on_portfolio=self.on_portfolio,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db
@@ -877,6 +878,112 @@ class CreateStrategyApp:
     def _on_optimize_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка оптимизации: {error_msg}")
         self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
+
+    def on_portfolio(self) -> None:
+        """Запуск портфельного бэктеста по нескольким тикерам."""
+        raw = self.app.portfolio_entry.get().strip()
+        if not raw:
+            self.app.add_backtest_result("Ошибка: введите тикеры через запятую или пробел.")
+            return
+
+        tickers = [t.strip().upper() for t in raw.replace(',', ' ').split() if t.strip()]
+        if not tickers:
+            self.app.add_backtest_result("Ошибка: не указаны тикеры.")
+            return
+        if len(tickers) < 2:
+            self.app.add_backtest_result("Ошибка: для портфеля нужно минимум 2 тикера.")
+            return
+
+        params = self.app.get_backtest_params()
+        if params is None:
+            self.app.add_backtest_result("Ошибка: проверьте числовые параметры.")
+            return
+        strategy_id = params.pop('strategy', 'bounce')
+
+        start_date = self.app.start_date_entry.get()
+        end_date = self.app.end_date_entry.get()
+
+        self.app.portfolio_button.config(state='disabled', text='Портфель...')
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+        txt.insert(tk.END, f"Загрузка данных для {len(tickers)} тикеров: {', '.join(tickers)}\n")
+        self.root.update_idletasks()
+
+        def fetch_and_run():
+            try:
+                portfolio_data = {}
+                errors = []
+                for t in tickers:
+                    data = self.get_stock_data(t, start_date, end_date)
+                    if isinstance(data, str):
+                        errors.append(f"{t}: {data}")
+                    elif len(data) < MIN_CANDLES_FOR_BACKTEST:
+                        errors.append(f"{t}: недостаточно данных ({len(data)} свечей)")
+                    else:
+                        portfolio_data[t] = data
+
+                if not portfolio_data:
+                    self.root.after(0, lambda: self._on_portfolio_error("Нет данных ни по одному тикеру."))
+                    return
+
+                from backtest.portfolio import run_portfolio
+                result = run_portfolio(portfolio_data, capital=params.get('capital', 1_000_000), **params)
+
+                self.root.after(0, lambda: self._on_portfolio_complete(result, strategy_id, errors))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_portfolio_error(str(e)))
+
+        t = threading.Thread(target=fetch_and_run, daemon=True)
+        t.start()
+
+    def _on_portfolio_complete(self, result, strategy_id, errors):
+        self.app.portfolio_button.config(state='normal', text='4. Портфельный бэктест')
+        pm = result['portfolio_metrics']
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+
+        from strategy.config import STRATEGY_REGISTRY
+        strat_name = STRATEGY_REGISTRY.get(strategy_id, {}).get('name', strategy_id)
+
+        lines = [
+            f"========== ПОРТФЕЛЬНЫЙ БЭКТЕСТ ==========",
+            f"Стратегия: {strat_name}",
+            f"Тикеров: {len(result['ticker_results'])}",
+            "",
+            f"Начальный капитал: {pm['initial_capital']:,.0f} руб",
+            f"Конечный капитал:   {pm['final_capital']:,.0f} руб",
+            f"Чистая прибыль:     {pm['net_profit']:+,.0f} руб",
+            f"Общая доходность:   {pm['total_return']:+.2f} %",
+            "",
+            f"Всего сделок:       {pm['total_trades']}",
+            f"Win Rate:           {pm['win_rate']:.1f} %",
+            f"Profit Factor:      {pm['profit_factor']}",
+            f"Max Drawdown:       -{pm['max_drawdown']:.2f} %",
+            f"Sharpe Ratio:       {pm['sharpe']}",
+            "",
+            "── По тикерам ──",
+        ]
+        for ticker, tr in sorted(result['ticker_results'].items()):
+            m = tr['metrics']
+            lines.append(
+                f"  {ticker}: {m.get('total_return', 0):+.2f}% | "
+                f"сделок={m.get('total_trades', 0)} | "
+                f"Sharpe={m.get('sharpe', 0)} | "
+                f"DD=-{m.get('max_drawdown', 0):.1f}%"
+            )
+
+        if errors:
+            lines.append("")
+            lines.append("── Ошибки ──")
+            for e in errors:
+                lines.append(f"  {e}")
+
+        lines.append("=" * 50)
+        txt.insert(tk.END, '\n'.join(lines))
+
+    def _on_portfolio_error(self, error_msg):
+        self.app.add_backtest_result(f"Ошибка портфельного бэктеста: {error_msg}")
+        self.app.portfolio_button.config(state='normal', text='4. Портфельный бэктест')
 
     def on_scanner(self) -> None:
         """Запуск сканера по секторам"""
