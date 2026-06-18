@@ -36,6 +36,7 @@ class BacktestEngine:
                  partial_tp_ratio2=3.0, partial_tp_size1=0.5,
                  use_pivot_levels=0, pivot_lookback=5,
                  use_mtf_filter=0, mtf_ma_period=20,
+                 position_sizing=0, kelly_fraction=0.25, atr_sizing_mult=2.0,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -61,9 +62,41 @@ class BacktestEngine:
         self.pivot_lookback = max(pivot_lookback, 2)
         self.use_mtf_filter = use_mtf_filter
         self.mtf_ma_period = max(mtf_ma_period, 5)
+        self.position_sizing = position_sizing
+        self.kelly_fraction = max(min(kelly_fraction, 1.0), 0.0)
+        self.atr_sizing_mult = max(atr_sizing_mult, 0.5)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
+        self._closed_trades = []  # for Kelly estimation
+
+    def _calc_position_size(self, capital, entry_price, sl_price, atr):
+        if self.position_sizing == 2:
+            risk_amount = capital * self.risk_per_trade
+            qty = risk_amount / (self.atr_sizing_mult * atr)
+            return max(qty, 0)
+
+        if self.position_sizing == 1:
+            wins = [t['pnl'] for t in self._closed_trades if t.get('pnl', 0) > 0]
+            losses = [t['pnl'] for t in self._closed_trades if t.get('pnl', 0) < 0]
+            if len(wins) + len(losses) >= 5 and losses:
+                win_rate = len(wins) / (len(wins) + len(losses))
+                avg_win = sum(wins) / len(wins)
+                avg_loss = abs(sum(losses) / len(losses))
+                b = avg_win / avg_loss if avg_loss > 0 else 1
+                f_kelly = (win_rate * b - (1 - win_rate)) / b
+                f_kelly = max(min(f_kelly, 0.5), 0.01)
+            else:
+                f_kelly = self.kelly_fraction
+            qty = (capital * f_kelly) / entry_price
+            return max(qty, 0)
+
+        # Default: fixed risk
+        sl_dist = abs(entry_price - sl_price) / entry_price if entry_price != 0 else 0.01
+        if sl_dist <= 0:
+            return 0
+        risk_amount = capital * self.risk_per_trade
+        return risk_amount / (sl_dist * entry_price)
 
     def _mtf_allows(self, df, idx, side):
         """Check if higher timeframe trend agrees with signal side."""
@@ -171,9 +204,10 @@ class BacktestEngine:
                     entry_price = open_price
                 sl = signal['sl_price']
                 sl_dist = abs(entry_price - sl) / entry_price if entry_price != 0 else 0.01
-                if sl_dist > 0 and has_atr:
-                    risk_amount = self.capital * self.risk_per_trade
-                    qty = risk_amount / (sl_dist * entry_price)
+                if has_atr:
+                    qty = self._calc_position_size(self.capital, entry_price, sl, atr)
+                    if qty <= 0:
+                        continue
                     direction = 1 if signal['side'] == 'BUY' else -1
                     entry_atr = atr
                     tp = entry_price + direction * self.atr_tp * entry_atr
@@ -283,6 +317,7 @@ class BacktestEngine:
                                     'tp_price': round(tp1, 2),
                                     'max_hold': self.max_hold,
                                 })
+                                self._closed_trades.append(trades[-1])
                             position['partial_tp1_hit'] = True
                             position['remaining_qty'] = remain_qty
                             if remain_qty > 0:
@@ -359,6 +394,7 @@ class BacktestEngine:
                         'tp_price': round(position['tp'], 2),
                         'max_hold': self.max_hold,
                     })
+                    self._closed_trades.append(trades[-1])
 
                     position = None
 
@@ -393,6 +429,7 @@ class BacktestEngine:
                 'tp_price': round(position['tp'], 2),
                 'max_hold': self.max_hold,
             })
+            self._closed_trades.append(trades[-1])
 
         freq_sorted = [p for p, c in sorted(price_counter.items(), key=lambda x: -x[1])[:10]]
         if self.use_pivot_levels:

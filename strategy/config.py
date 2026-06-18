@@ -30,6 +30,14 @@ EXIT_STRATEGY_PARAMS = [
      'hint': '0=выкл, 1=вкл (старший таймфрейм)'},
     {'key': 'mtf_ma_period', 'label': 'MA период (старший ТФ)', 'default': 20, 'type': int,
      'hint': 'Период MA на недельных свечах для фильтра тренда'},
+
+    # --- Position sizing ---
+    {'key': 'position_sizing', 'label': 'Управление размером', 'default': 0, 'type': int,
+     'hint': '0=фикс. риск, 1=Kelly, 2=ATR-зависимый'},
+    {'key': 'kelly_fraction', 'label': 'Доля Kelly', 'default': 0.25, 'type': float,
+     'hint': 'Доля от Kelly Criterion (0.0–1.0)'},
+    {'key': 'atr_sizing_mult', 'label': 'ATR-множитель', 'default': 2.0, 'type': float,
+     'hint': 'Множитель ATR для волатильного позиционирования'},
 ]
 
 STRATEGY_REGISTRY = {

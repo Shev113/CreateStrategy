@@ -550,6 +550,13 @@ class StockAppVisual:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+            elif pcfg['key'] == 'position_sizing':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=14, font=('', 8),
+                    values=['Фикс. риск', 'Kelly', 'ATR-зависимый'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
             else:
                 entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
                 entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
@@ -865,6 +872,13 @@ class ScannerUI:
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=14, font=('', 8),
                     values=['Большинство (>50%)', 'Любой сигнал', 'Консенсус'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
+            elif pcfg['key'] == 'position_sizing':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=14, font=('', 8),
+                    values=['Фикс. риск', 'Kelly', 'ATR-зависимый'])
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
