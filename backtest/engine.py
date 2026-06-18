@@ -35,6 +35,7 @@ class BacktestEngine:
                  partial_tp=0, partial_tp_ratio1=1.5,
                  partial_tp_ratio2=3.0, partial_tp_size1=0.5,
                  use_pivot_levels=0, pivot_lookback=5,
+                 use_mtf_filter=0, mtf_ma_period=20,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -58,9 +59,34 @@ class BacktestEngine:
         self.partial_tp_size1 = partial_tp_size1
         self.use_pivot_levels = use_pivot_levels
         self.pivot_lookback = max(pivot_lookback, 2)
+        self.use_mtf_filter = use_mtf_filter
+        self.mtf_ma_period = max(mtf_ma_period, 5)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
+
+    def _mtf_allows(self, df, idx, side):
+        """Check if higher timeframe trend agrees with signal side."""
+        if not self.use_mtf_filter:
+            return True
+        weeklies = df['Close'].resample('W').last()
+        if len(weeklies) < self.mtf_ma_period + 1:
+            return True
+        weekly_ma = weeklies.rolling(self.mtf_ma_period).mean()
+        # Use the most recent weekly close before current idx
+        current_date = df.index[idx]
+        weekly_slice = weeklies[weeklies.index <= current_date]
+        if len(weekly_slice) < 2:
+            return True
+        last_close = weekly_slice.iloc[-1]
+        ma_slice = weekly_ma[weekly_ma.index <= current_date]
+        if len(ma_slice) < 1:
+            return True
+        last_ma = ma_slice.iloc[-1]
+        if side == 'BUY':
+            return last_close > last_ma
+        else:
+            return last_close < last_ma
 
     def _get_signal(self, candles, idx, levels, atr):
         if self._signal_func is None:
@@ -131,6 +157,8 @@ class BacktestEngine:
             if pending_signal is not None and position is None:
                 signal = pending_signal
                 pending_signal = None
+                if not self._mtf_allows(df, i, signal['side']):
+                    continue
                 open_price = float(current_candle[0])
                 if self.entry_type == 1:
                     level = float(signal['level'])

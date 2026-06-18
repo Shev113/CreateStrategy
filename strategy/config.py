@@ -24,6 +24,12 @@ EXIT_STRATEGY_PARAMS = [
      'hint': 'Второй целевой уровень в ATR'},
     {'key': 'partial_tp_size1', 'label': 'Доля TP1', 'default': 0.5, 'type': float,
      'hint': 'Доля позиции для закрытия на TP1 (0.0-1.0)'},
+
+    # --- Multi-timeframe filter ---
+    {'key': 'use_mtf_filter', 'label': 'MTF-фильтр', 'default': 0, 'type': int,
+     'hint': '0=выкл, 1=вкл (старший таймфрейм)'},
+    {'key': 'mtf_ma_period', 'label': 'MA период (старший ТФ)', 'default': 20, 'type': int,
+     'hint': 'Период MA на недельных свечах для фильтра тренда'},
 ]
 
 STRATEGY_REGISTRY = {

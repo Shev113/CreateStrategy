@@ -529,6 +529,13 @@ class StockAppVisual:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+            elif pcfg['key'] == 'use_mtf_filter':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=10, font=('', 8),
+                    values=['Выкл', 'Вкл'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
             elif pcfg['key'] == 'use_pivot_levels':
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=10, font=('', 8),
@@ -834,6 +841,13 @@ class ScannerUI:
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
             elif pcfg['key'] == 'partial_tp':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=10, font=('', 8),
+                    values=['Выкл', 'Вкл'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
+            elif pcfg['key'] == 'use_mtf_filter':
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=10, font=('', 8),
                     values=['Выкл', 'Вкл'])
