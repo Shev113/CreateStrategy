@@ -1,0 +1,25 @@
+{
+  "GAZP": {
+    "strategy": "bounce",
+    "params": {
+      "capital": 1000000.0,
+      "risk_per_trade": 2.0,
+      "atr_sl": 1.0,
+      "atr_tp": 2.0,
+      "min_hits": 5,
+      "max_hold": 20,
+      "commission": 0.05,
+      "entry_type": 0,
+      "use_pivot_levels": 0,
+      "pivot_lookback": 5,
+      "trailing_sl": 0,
+      "trailing_activation": 0.5,
+      "trailing_offset": 0.5,
+      "trailing_ma_period": 20,
+      "partial_tp": 0,
+      "partial_tp_ratio1": 1.5,
+      "partial_tp_ratio2": 3.0,
+      "partial_tp_size1": 0.5
+    }
+  }
+}

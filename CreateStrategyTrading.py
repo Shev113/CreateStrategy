@@ -828,7 +828,7 @@ class CreateStrategyApp:
                 ))
                 txt.tag_config(tag_name, foreground='blue', underline=1)
                 txt.tag_bind(tag_name, '<Button-1>',
-                             lambda e, idx=rank - 1: self._apply_optimized_params(results[idx]))
+                             lambda e, idx=rank - 1: self._apply_optimized_params(results[idx]['params']))
                 txt.tag_bind(tag_name, '<Enter>',
                              lambda e, tn=tag_name: txt.tag_config(tn, foreground='#0066ff'))
                 txt.tag_bind(tag_name, '<Leave>',
@@ -839,7 +839,6 @@ class CreateStrategyApp:
 
     def _apply_optimized_params(self, params_dict):
         """Применить параметры из оптимизации к текущим настройкам бумаги."""
-        import tkinter as tk
         app = self.app
         txt = app.backtest_text
 
@@ -849,7 +848,7 @@ class CreateStrategyApp:
                 entry = app._param_entries.get(key)
                 if entry is None:
                     continue
-                if isinstance(entry, tk.ttk.Combobox):
+                if isinstance(entry, ttk.Combobox):
                     try:
                         entry.current(int(value))
                     except (ValueError, TypeError):
@@ -859,6 +858,7 @@ class CreateStrategyApp:
                     entry.insert(0, str(value))
 
             app._save_current_settings()
+            self.root.update_idletasks()
 
             ticker = app._extract_ticker(app.stock_combobox.get())
             txt.delete(1.0, tk.END)
@@ -872,6 +872,7 @@ class CreateStrategyApp:
         except Exception as e:
             txt.delete(1.0, tk.END)
             txt.insert(tk.END, f"Ошибка при применении параметров: {e}")
+            raise
 
     def _on_optimize_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка оптимизации: {error_msg}")
