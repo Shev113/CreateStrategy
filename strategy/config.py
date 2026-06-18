@@ -806,6 +806,25 @@ STRATEGY_REGISTRY = {
             {'key': 'entry_type', 'label': 'Тип входа', 'default': 0, 'type': int},
         ]
     },
+    'ensemble': {
+        'name': 'Ансамбль стратегий',
+        'description': 'Голосование нескольких стратегий (majority/any/consensus)',
+        'func': 'strategy.ensemble:check_ensemble',
+        'params': [
+            {'key': 'capital', 'label': 'Стартовый капитал', 'default': 1000000, 'type': float},
+            {'key': 'risk_per_trade', 'label': 'Риск на сделку %', 'default': 2.0, 'type': float},
+            {'key': 'atr_sl', 'label': 'ATR для SL', 'default': 1.0, 'type': float},
+            {'key': 'atr_tp', 'label': 'ATR для TP', 'default': 2.0, 'type': float},
+            {'key': 'min_hits', 'label': 'Мин. повторов уровня', 'default': 5, 'type': int},
+            {'key': 'max_hold', 'label': 'Макс. свечей удержания', 'default': 20, 'type': int},
+            {'key': 'commission', 'label': 'Комиссия %', 'default': 0.05, 'type': float},
+            {'key': 'sub_strategies', 'label': 'Стратегии (через запятую)', 'default': 'bounce,fisher,trend', 'type': str,
+             'hint': 'ID стратегий для ансамбля, например: bounce,fisher,trend,tsi'},
+            {'key': 'vote_method', 'label': 'Метод голосования', 'default': 0, 'type': int,
+             'hint': '0=большинство, 1=любой сигнал, 2=консенсус'},
+            {'key': 'entry_type', 'label': 'Тип входа', 'default': 0, 'type': int},
+        ]
+    },
 }
 
 

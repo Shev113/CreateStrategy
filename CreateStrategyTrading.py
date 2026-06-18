@@ -880,18 +880,15 @@ class CreateStrategyApp:
         self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
 
     def on_portfolio(self) -> None:
-        """Запуск портфельного бэктеста по нескольким тикерам."""
-        raw = self.app.portfolio_entry.get().strip()
-        if not raw:
-            self.app.add_backtest_result("Ошибка: введите тикеры через запятую или пробел.")
+        """Портфельный бэктест по тикерам из торгового дневника."""
+        entries = self.diary_storage.load()
+        if not entries:
+            self.app.add_backtest_result("Ошибка: дневник пуст. Добавьте сделки в дневник.")
             return
 
-        tickers = [t.strip().upper() for t in raw.replace(',', ' ').split() if t.strip()]
-        if not tickers:
-            self.app.add_backtest_result("Ошибка: не указаны тикеры.")
-            return
+        tickers = sorted({e.ticker for e in entries})
         if len(tickers) < 2:
-            self.app.add_backtest_result("Ошибка: для портфеля нужно минимум 2 тикера.")
+            self.app.add_backtest_result("Ошибка: в дневнике меньше 2 уникальных тикеров.")
             return
 
         params = self.app.get_backtest_params()
@@ -906,7 +903,7 @@ class CreateStrategyApp:
         self.app.portfolio_button.config(state='disabled', text='Портфель...')
         txt = self.app.backtest_text
         txt.delete(1.0, tk.END)
-        txt.insert(tk.END, f"Загрузка данных для {len(tickers)} тикеров: {', '.join(tickers)}\n")
+        txt.insert(tk.END, f"Загрузка данных для {len(tickers)} тикеров из дневника: {', '.join(tickers)}\n")
         self.root.update_idletasks()
 
         def fetch_and_run():

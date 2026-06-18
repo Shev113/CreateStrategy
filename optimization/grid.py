@@ -86,6 +86,7 @@ STRATEGY_SPECIFIC_GRID = {
     'dyn_breakout': {'dbo_lookback': [15, 20, 30], 'dbo_vol_lookback': [20, 30], 'dbo_bb_mult': [1.5, 2.0]},
     'bb_macd': {'bbm_macd_fast': [10, 12], 'bbm_macd_slow': [20, 26], 'bbm_macd_signal': [7, 9]},
     'base_channel': {'bc_period': [15, 20, 30], 'bc_vol_period': [20, 30]},
+    'ensemble': {},
 }
 
 MAX_COMBINATIONS = 200

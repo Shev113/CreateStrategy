@@ -112,7 +112,7 @@ class StockAppVisual:
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
         parent.grid_rowconfigure(3, weight=1)
-        parent.grid_rowconfigure(12, weight=2)
+        parent.grid_rowconfigure(11, weight=2)
 
         self.result_text = tk.Text(parent, height=6, width=55)
         self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
@@ -137,20 +137,14 @@ class StockAppVisual:
         self._strategy_combo.grid(row=5, column=1, padx=5, pady=(5, 0), sticky='w')
         self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
 
-        ttk.Label(parent, text="Портфель (тикеры):",
-                  font=('', 8)).grid(row=6, column=0, padx=5, pady=(2, 0), sticky='w')
-        self.portfolio_entry = ttk.Entry(parent, width=28, font=('', 8))
-        self.portfolio_entry.grid(row=6, column=1, padx=5, pady=(2, 0), sticky='w')
-        self.portfolio_entry.insert(0, '')
-
         self._params_frame = ttk.Frame(parent)
-        self._params_frame.grid(row=7, column=0, columnspan=2, sticky='ew', padx=5, pady=1)
+        self._params_frame.grid(row=6, column=0, columnspan=2, sticky='ew', padx=5, pady=1)
 
         self._param_entries = {}
         self._rebuild_params()
 
         btn_row = ttk.Frame(parent)
-        btn_row.grid(row=8, column=0, columnspan=2, pady=1)
+        btn_row.grid(row=7, column=0, columnspan=2, pady=1)
 
         self.save_settings_btn = ttk.Button(
             btn_row, text="Настройки", width=10,
@@ -177,18 +171,18 @@ class StockAppVisual:
 
         self.backtest_button = ttk.Button(
             parent, text="2. Запустить Backtest", command=on_backtest)
-        self.backtest_button.grid(row=9, column=0, columnspan=2, pady=1)
+        self.backtest_button.grid(row=8, column=0, columnspan=2, pady=1)
 
         self.optimize_button = ttk.Button(
             parent, text="3. Оптимизация параметров", command=lambda: on_optimize() if on_optimize else None)
-        self.optimize_button.grid(row=10, column=0, columnspan=2, pady=1)
+        self.optimize_button.grid(row=9, column=0, columnspan=2, pady=1)
 
         self.portfolio_button = ttk.Button(
             parent, text="4. Портфельный бэктест", command=lambda: on_portfolio() if on_portfolio else None)
-        self.portfolio_button.grid(row=11, column=0, columnspan=2, pady=1)
+        self.portfolio_button.grid(row=10, column=0, columnspan=2, pady=1)
 
         self.backtest_text = tk.Text(parent, height=8, width=55)
-        self.backtest_text.grid(row=12, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
 
     def enable_save_results_button(self):
@@ -542,6 +536,13 @@ class StockAppVisual:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+            elif pcfg['key'] == 'vote_method':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=14, font=('', 8),
+                    values=['Большинство (>50%)', 'Любой сигнал', 'Консенсус'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
             else:
                 entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
                 entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
@@ -563,6 +564,8 @@ class StockAppVisual:
                 cfg = next((c for c in cfg_list if c['key'] == key), None)
                 if cfg and cfg['type'] == int:
                     params[key] = int(raw)
+                elif cfg and cfg['type'] == str:
+                    params[key] = raw
                 else:
                     params[key] = float(raw)
 
@@ -573,11 +576,8 @@ class StockAppVisual:
 
             return params
         except (ValueError, TypeError):
+            print(f"Ошибка преобразования параметра {key}: {raw}")
             return None
-
-    def _settings_path(self):
-        os.makedirs('results', exist_ok=True)
-        return 'results/ticker_settings.json'
 
     def _save_current_settings(self):
         ticker = self._extract_ticker(self.stock_combobox.get())
@@ -603,6 +603,8 @@ class StockAppVisual:
             cfg = next((c for c in cfg_list if c['key'] == key), None)
             if cfg and cfg['type'] == int:
                 data[ticker]['params'][key] = int(raw)
+            elif cfg and cfg['type'] == str:
+                data[ticker]['params'][key] = raw
             else:
                 data[ticker]['params'][key] = float(raw)
         with open(self._settings_path(), 'w', encoding='utf-8') as f:
@@ -845,6 +847,13 @@ class ScannerUI:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+            elif pcfg['key'] == 'vote_method':
+                combo = ttk.Combobox(
+                    self._params_frame, state='readonly', width=14, font=('', 8),
+                    values=['Большинство (>50%)', 'Любой сигнал', 'Консенсус'])
+                combo.current(pcfg['default'])
+                combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
+                self._param_entries[pcfg['key']] = combo
             else:
                 entry = ttk.Entry(self._params_frame, width=8, font=('', 8))
                 entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
@@ -893,6 +902,8 @@ class ScannerUI:
                 cfg = next((c for c in cfg_list if c['key'] == key), None)
                 if cfg and cfg['type'] == int:
                     params[key] = int(raw)
+                elif cfg and cfg['type'] == str:
+                    params[key] = raw
                 else:
                     params[key] = float(raw)
 
