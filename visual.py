@@ -35,7 +35,7 @@ class StockAppVisual:
     def __init__(self, parent, on_select, on_export_button,
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
-                 on_optimize=None, on_portfolio=None,
+                 on_optimize=None, on_portfolio=None, on_walkforward=None,
                  favorites=None, on_toggle_favorite=None,
                  sector_db=None):
         self.root = parent.winfo_toplevel()
@@ -181,8 +181,12 @@ class StockAppVisual:
             parent, text="4. Портфельный бэктест", command=lambda: on_portfolio() if on_portfolio else None)
         self.portfolio_button.grid(row=10, column=0, columnspan=2, pady=1)
 
+        self.walkforward_button = ttk.Button(
+            parent, text="5. Walk-forward", command=lambda: on_walkforward() if on_walkforward else None)
+        self.walkforward_button.grid(row=11, column=0, columnspan=2, pady=1)
+
         self.backtest_text = tk.Text(parent, height=8, width=55)
-        self.backtest_text.grid(row=11, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.backtest_text.grid(row=12, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
 
     def enable_save_results_button(self):

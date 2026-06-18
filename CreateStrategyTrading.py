@@ -184,6 +184,7 @@ class CreateStrategyApp:
             on_save_results=self._on_save_results,
             on_optimize=self.on_optimize,
             on_portfolio=self.on_portfolio,
+            on_walkforward=self.on_walkforward,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db
@@ -878,6 +879,58 @@ class CreateStrategyApp:
     def _on_optimize_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка оптимизации: {error_msg}")
         self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
+
+    def on_walkforward(self) -> None:
+        """Запуск Walk-forward анализа."""
+        if self.state.stock_data is None or not isinstance(self.state.stock_data, list):
+            self.app.add_backtest_result("Ошибка: сначала загрузите данные (кнопка 1)")
+            return
+        if len(self.state.stock_data) < MIN_CANDLES_FOR_BACKTEST:
+            self.app.add_backtest_result("Ошибка: слишком мало данных (нужно >= 30 свечей)")
+            return
+
+        params = self.app.get_backtest_params()
+        if params is None:
+            self.app.add_backtest_result("Ошибка: проверьте числовые параметры.")
+            return
+
+        strategy_id = params.pop('strategy', 'bounce')
+
+        self.app.walkforward_button.config(state='disabled', text='Walk-forward...')
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+        txt.insert(tk.END, "Запуск Walk-forward анализа...\n")
+        self.root.update_idletasks()
+
+        def run():
+            try:
+                from optimization.walkforward import run_walkforward, summarize_walkforward
+                results = run_walkforward(
+                    strategy_id,
+                    self.state.stock_data,
+                    window_years=2,
+                    step_years=1,
+                    oos_split=0.3,
+                    default_params=params,
+                    progress_fn=lambda c, t: None,
+                )
+                report = summarize_walkforward(results)
+                self.root.after(0, lambda: self._on_walkforward_complete(report))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_walkforward_error(str(e)))
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+
+    def _on_walkforward_complete(self, report):
+        self.app.walkforward_button.config(state='normal', text='5. Walk-forward')
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+        txt.insert(tk.END, report)
+
+    def _on_walkforward_error(self, error_msg):
+        self.app.add_backtest_result(f"Ошибка Walk-forward: {error_msg}")
+        self.app.walkforward_button.config(state='normal', text='5. Walk-forward')
 
     def on_portfolio(self) -> None:
         """Портфельный бэктест по тикерам из торгового дневника."""
