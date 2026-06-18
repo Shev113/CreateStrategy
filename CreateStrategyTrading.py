@@ -794,34 +794,84 @@ class CreateStrategyApp:
         from strategy.config import STRATEGY_REGISTRY
         strat_name = STRATEGY_REGISTRY.get(strategy_id, {}).get('name', strategy_id)
 
-        lines = [
-            f"========== ОПТИМИЗАЦИЯ: {strat_name} ==========",
-            f"Проверено комбинаций: {total}",
-            f"Лучших результатов: {len(results)}",
-            "",
-        ]
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+        txt.insert(tk.END, (
+            f"========== ОПТИМИЗАЦИЯ: {strat_name} ==========\n"
+            f"Проверено комбинаций: {total}\n"
+            f"Лучших результатов: {len(results)}\n\n"
+        ))
+
         if results:
             best = results[0]
-            lines.append("── Лучшие параметры ──")
+            txt.insert(tk.END, "── Лучшие параметры ──\n")
             for k, v in best['params'].items():
-                lines.append(f"  {k}: {v}")
-            lines.append("")
-            lines.append(f"  Sharpe:       {best['sharpe']:.2f}")
-            lines.append(f"  Profit Factor:{best['profit_factor']:.2f}")
-            lines.append(f"  Доходность:   {best['total_return']:+.2f}%")
-            lines.append(f"  Max Drawdown: -{best['max_drawdown']:.2f}%")
-            lines.append(f"  Сделок:       {best['total_trades']}")
-            lines.append(f"  Win Rate:     {best['win_rate']:.1f}%")
-            lines.append("")
-            lines.append("── Топ-5 комбинаций ──")
+                txt.insert(tk.END, f"  {k}: {v}\n")
+            txt.insert(tk.END, "\n")
+            txt.insert(tk.END, (
+                f"  Sharpe:       {best['sharpe']:.2f}\n"
+                f"  Profit Factor:{best['profit_factor']:.2f}\n"
+                f"  Доходность:   {best['total_return']:+.2f}%\n"
+                f"  Max Drawdown: -{best['max_drawdown']:.2f}%\n"
+                f"  Сделок:       {best['total_trades']}\n"
+                f"  Win Rate:     {best['win_rate']:.1f}%\n\n"
+            ))
+            txt.insert(tk.END, "── Топ-5 комбинаций (нажмите [Применить]) ──\n")
             for rank, r in enumerate(results[:5], 1):
                 param_str = ", ".join(f"{k}={v}" for k, v in r['params'].items())
-                lines.append(f"  {rank}. Sharpe={r['sharpe']:.2f} PF={r['profit_factor']:.2f} "
-                             f"Ret={r['total_return']:+.1f}% | {param_str}")
+                txt.insert(tk.END, f"  {rank}. ")
+                tag_name = f"apply_{rank - 1}"
+                txt.insert(tk.END, "[Применить] ", (tag_name,))
+                txt.insert(tk.END, (
+                    f"Sharpe={r['sharpe']:.2f} PF={r['profit_factor']:.2f} "
+                    f"Ret={r['total_return']:+.1f}% | {param_str}\n"
+                ))
+                txt.tag_config(tag_name, foreground='blue', underline=1)
+                txt.tag_bind(tag_name, '<Button-1>',
+                             lambda e, idx=rank - 1: self._apply_optimized_params(results[idx]))
+                txt.tag_bind(tag_name, '<Enter>',
+                             lambda e, tn=tag_name: txt.tag_config(tn, foreground='#0066ff'))
+                txt.tag_bind(tag_name, '<Leave>',
+                             lambda e, tn=tag_name: txt.tag_config(tn, foreground='blue'))
         else:
-            lines.append("Не найдено комбинаций с достаточным числом сделок (>=5).")
-        lines.append("=" * 50)
-        self.app.add_backtest_result('\n'.join(lines))
+            txt.insert(tk.END, "Не найдено комбинаций с достаточным числом сделок (>=5).\n")
+        txt.insert(tk.END, "=" * 50)
+
+    def _apply_optimized_params(self, params_dict):
+        """Применить параметры из оптимизации к текущим настройкам бумаги."""
+        import tkinter as tk
+        app = self.app
+        txt = app.backtest_text
+
+        try:
+            app._rebuild_params()
+            for key, value in params_dict.items():
+                entry = app._param_entries.get(key)
+                if entry is None:
+                    continue
+                if isinstance(entry, tk.ttk.Combobox):
+                    try:
+                        entry.current(int(value))
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    entry.delete(0, tk.END)
+                    entry.insert(0, str(value))
+
+            app._save_current_settings()
+
+            ticker = app._extract_ticker(app.stock_combobox.get())
+            txt.delete(1.0, tk.END)
+            txt.insert(tk.END, (
+                f"Параметры применены к бумаге {ticker}.\n"
+                "Настройки сохранены в ticker_settings.json.\n\n"
+                "Применённые параметры:\n"
+            ))
+            for k, v in params_dict.items():
+                txt.insert(tk.END, f"  {k}: {v}\n")
+        except Exception as e:
+            txt.delete(1.0, tk.END)
+            txt.insert(tk.END, f"Ошибка при применении параметров: {e}")
 
     def _on_optimize_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка оптимизации: {error_msg}")
