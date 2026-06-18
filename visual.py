@@ -111,11 +111,10 @@ class StockAppVisual:
         self.end_date_entry.grid(row=2, column=1, padx=5, pady=5, sticky='w')
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
-        parent.grid_rowconfigure(3, weight=1)
-        parent.grid_rowconfigure(9, weight=2)
+        parent.grid_rowconfigure(8, weight=1)
 
         self.result_text = tk.Text(parent, height=6, width=55)
-        self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='ew')
         _add_copy_menu(self.result_text)
 
         # Стратегия
