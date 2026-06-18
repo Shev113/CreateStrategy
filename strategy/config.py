@@ -1,6 +1,13 @@
 # config.py
 # Общие параметры выхода из сделки — применяются ко всем стратегиям
 EXIT_STRATEGY_PARAMS = [
+
+    # --- Параметры детекции уровней ---
+    {'key': 'use_pivot_levels', 'label': 'Pivot-уровни', 'default': 0, 'type': int,
+     'hint': '0=частотный метод (по умолч.), 1=pivot detection'},
+    {'key': 'pivot_lookback', 'label': 'Lookback пивотов', 'default': 5, 'type': int,
+     'hint': 'Свечей с каждой стороны для подтверждения пивота'},
+
     {'key': 'trailing_sl', 'label': 'Трейлинг-стоп', 'default': 0, 'type': int,
      'hint': '0=выкл, 1=фикс. отступ, 2=по MA'},
     {'key': 'trailing_activation', 'label': 'Активация (ATR)', 'default': 0.5, 'type': float,

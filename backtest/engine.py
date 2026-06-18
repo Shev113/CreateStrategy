@@ -34,6 +34,7 @@ class BacktestEngine:
                  trailing_offset=0.5, trailing_ma_period=20,
                  partial_tp=0, partial_tp_ratio1=1.5,
                  partial_tp_ratio2=3.0, partial_tp_size1=0.5,
+                 use_pivot_levels=0, pivot_lookback=5,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -47,14 +48,16 @@ class BacktestEngine:
         self.tolerance = tolerance
         self.strategy = strategy
         self.entry_type = entry_type
-        self.trailing_sl = trailing_sl  # 0=off, 1=fixed offset, 2=MA-based
+        self.trailing_sl = trailing_sl
         self.trailing_activation = trailing_activation
         self.trailing_offset = trailing_offset
         self.trailing_ma_period = trailing_ma_period
-        self.partial_tp = partial_tp  # 0=off, 1=on
+        self.partial_tp = partial_tp
         self.partial_tp_ratio1 = partial_tp_ratio1
         self.partial_tp_ratio2 = partial_tp_ratio2
         self.partial_tp_size1 = partial_tp_size1
+        self.use_pivot_levels = use_pivot_levels
+        self.pivot_lookback = max(pivot_lookback, 2)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
@@ -84,6 +87,7 @@ class BacktestEngine:
             tolerance = avg_price * 0.005
 
         price_counter = Counter()
+        pivot_levels = set()
 
         trades = []
         position = None
@@ -99,9 +103,29 @@ class BacktestEngine:
 
             current_candle = candles_list[i]
 
-            levels = [p for p, c in price_counter.items() if c >= self.min_hits]
             atr = atr_series.iloc[i]
             has_atr = not pd.isna(atr)
+
+            # --- Pivot level detection (no lookahead) ---
+            if self.use_pivot_levels and i >= self.pivot_lookback * 2:
+                j = i - self.pivot_lookback
+                # Pivot high
+                h_j = df['High'].iloc[j]
+                if all(h_j >= df['High'].iloc[j - k] and h_j >= df['High'].iloc[j + k]
+                       for k in range(1, self.pivot_lookback + 1)):
+                    pivot_levels.add(round_to_tolerance(h_j, tolerance))
+                # Pivot low
+                l_j = df['Low'].iloc[j]
+                if all(l_j <= df['Low'].iloc[j - k] and l_j <= df['Low'].iloc[j + k]
+                       for k in range(1, self.pivot_lookback + 1)):
+                    pivot_levels.add(round_to_tolerance(l_j, tolerance))
+
+            # Combine freq-based and pivot levels
+            freq_levels = [p for p, c in price_counter.items() if c >= self.min_hits]
+            if self.use_pivot_levels:
+                levels = list(set(freq_levels) | pivot_levels)
+            else:
+                levels = freq_levels
 
             # Execute pending signal: enter at open of current candle
             if pending_signal is not None and position is None:
@@ -342,8 +366,11 @@ class BacktestEngine:
                 'max_hold': self.max_hold,
             })
 
-        self._final_levels = [p for p, c in
-                              sorted(price_counter.items(), key=lambda x: -x[1])[:10]]
+        freq_sorted = [p for p, c in sorted(price_counter.items(), key=lambda x: -x[1])[:10]]
+        if self.use_pivot_levels:
+            self._final_levels = list(set(freq_sorted) | set(sorted(pivot_levels)[:6]))
+        else:
+            self._final_levels = freq_sorted
         metrics = calc_metrics(trades, self.initial_capital, self.capital)
         return trades, metrics
 
