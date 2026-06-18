@@ -182,6 +182,7 @@ class CreateStrategyApp:
             on_diary=self.on_add_to_diary_analysis,
             on_show_settings=self.on_show_ticker_settings,
             on_save_results=self._on_save_results,
+            on_optimize=self.on_optimize,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db
@@ -753,6 +754,78 @@ class CreateStrategyApp:
             daemon=True
         )
         t.start()
+
+    def on_optimize(self) -> None:
+        """Запуск оптимизации параметров стратегии (асинхронно)"""
+        if self.state.stock_data is None or not isinstance(self.state.stock_data, list):
+            self.app.add_backtest_result("Ошибка: сначала загрузите данные (кнопка 1)")
+            return
+        if len(self.state.stock_data) < MIN_CANDLES_FOR_BACKTEST:
+            self.app.add_backtest_result("Ошибка: слишком мало данных (нужно >= 30 свечей)")
+            return
+
+        params = self.app.get_backtest_params()
+        if params is None:
+            self.app.add_backtest_result("Ошибка: проверьте числовые параметры.")
+            return
+
+        strategy_id = params.pop('strategy', 'bounce')
+
+        self.app.optimize_button.config(state='disabled', text='Оптимизация...')
+
+        def run():
+            try:
+                from optimization.grid import optimize
+                results, total = optimize(
+                    strategy_id,
+                    self.state.stock_data,
+                    default_params=params,
+                    progress_fn=lambda c, t: None
+                )
+                self.root.after(0, lambda: self._on_optimize_complete(results, total, strategy_id))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_optimize_error(str(e)))
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+
+    def _on_optimize_complete(self, results, total, strategy_id):
+        self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
+        from strategy.config import STRATEGY_REGISTRY
+        strat_name = STRATEGY_REGISTRY.get(strategy_id, {}).get('name', strategy_id)
+
+        lines = [
+            f"========== ОПТИМИЗАЦИЯ: {strat_name} ==========",
+            f"Проверено комбинаций: {total}",
+            f"Лучших результатов: {len(results)}",
+            "",
+        ]
+        if results:
+            best = results[0]
+            lines.append("── Лучшие параметры ──")
+            for k, v in best['params'].items():
+                lines.append(f"  {k}: {v}")
+            lines.append("")
+            lines.append(f"  Sharpe:       {best['sharpe']:.2f}")
+            lines.append(f"  Profit Factor:{best['profit_factor']:.2f}")
+            lines.append(f"  Доходность:   {best['total_return']:+.2f}%")
+            lines.append(f"  Max Drawdown: -{best['max_drawdown']:.2f}%")
+            lines.append(f"  Сделок:       {best['total_trades']}")
+            lines.append(f"  Win Rate:     {best['win_rate']:.1f}%")
+            lines.append("")
+            lines.append("── Топ-5 комбинаций ──")
+            for rank, r in enumerate(results[:5], 1):
+                param_str = ", ".join(f"{k}={v}" for k, v in r['params'].items())
+                lines.append(f"  {rank}. Sharpe={r['sharpe']:.2f} PF={r['profit_factor']:.2f} "
+                             f"Ret={r['total_return']:+.1f}% | {param_str}")
+        else:
+            lines.append("Не найдено комбинаций с достаточным числом сделок (>=5).")
+        lines.append("=" * 50)
+        self.app.add_backtest_result('\n'.join(lines))
+
+    def _on_optimize_error(self, error_msg):
+        self.app.add_backtest_result(f"Ошибка оптимизации: {error_msg}")
+        self.app.optimize_button.config(state='normal', text='3. Оптимизация параметров')
 
     def on_scanner(self) -> None:
         """Запуск сканера по секторам"""
