@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox as mb
@@ -115,7 +117,7 @@ class CreateStrategyApp:
                     "from": current_start.strftime("%Y-%m-%d"),
                     "interval": 24
                 }
-                response = requests.get(url, params=params, timeout=10)
+                response = requests.get(url, params=params, timeout=30, verify=False)
                 response.raise_for_status()
                 data = response.json()
                 if "candles" in data and "data" in data["candles"]:
@@ -542,7 +544,7 @@ class CreateStrategyApp:
         """Получение списка тикеров MOEX"""
         try:
             url = "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=30, verify=False)
             response.raise_for_status()
             data = response.json()
             if "securities" in data and "data" in data["securities"]:

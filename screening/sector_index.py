@@ -2,6 +2,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 INDEX_TO_SECTOR = {
     'MOEXOG': 'Нефть и газ',
@@ -28,7 +30,7 @@ ALL_TICKERS_URL = (
 
 
 def fetch_all_moex_tickers():
-    response = requests.get(ALL_TICKERS_URL, timeout=15)
+    response = requests.get(ALL_TICKERS_URL, timeout=15, verify=False)
     response.raise_for_status()
     data = response.json()
     return [row[0] for row in data['securities']['data']]
@@ -36,7 +38,7 @@ def fetch_all_moex_tickers():
 
 def fetch_index_tickers(index_id):
     url = ANALYTICS_URL.format(index_id=index_id)
-    response = requests.get(url, timeout=15)
+    response = requests.get(url, timeout=15, verify=False)
     response.raise_for_status()
     data = response.json()
     for block_name in ('analytics', 'indices'):

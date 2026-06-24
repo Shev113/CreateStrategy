@@ -7,7 +7,12 @@ from datetime import datetime
 
 import pandas as pd
 
-from utils import normalize_numeric_params, sort_tickers_by_favorites
+from utils import normalize_numeric_params, sort_tickers_by_favorites, ToolTip
+
+
+def _tip(widget, text):
+    """Attach a tooltip hint to a widget."""
+    return ToolTip(widget, text)
 
 
 
@@ -84,12 +89,14 @@ class StockAppVisual:
         ticker_frame.grid(row=0, column=1, padx=5, pady=5, sticky='w')
         self.stock_combobox = ttk.Combobox(ticker_frame, values=self._all_tickers, width=25)
         self.stock_combobox.pack(side=tk.LEFT)
+        _tip(self.stock_combobox, 'Выберите тикер для загрузки данных и бэктеста')
         if all_tickers:
             self.stock_combobox.set(all_tickers[0] if self._all_tickers else all_tickers[0])
 
         self._star_btn = ttk.Button(ticker_frame, text='★', width=3,
                                     command=self._toggle_current_favorite)
         self._star_btn.pack(side=tk.LEFT, padx=(4, 0))
+        _tip(self._star_btn, 'Добавить/удалить тикер в избранное')
         self._ticker_status_var = tk.StringVar()
         self._ticker_status_label = ttk.Label(ticker_frame, textvariable=self._ticker_status_var, foreground='gray')
         self._ticker_status_label.pack(side=tk.LEFT, padx=(8, 0))
@@ -99,23 +106,31 @@ class StockAppVisual:
         self._autocomplete_hit = False
         self.stock_combobox.bind('<KeyRelease>', self._on_ticker_keyrelease)
 
+        ToolTip(self.stock_combobox, 'Выбор тикера акции для анализа.\nНачните вводить символ — список отфильтруется автоматически.\nТикеры сгруппированы по секторам экономики.')
+        ToolTip(self._star_btn, 'Добавить тикер в избранное (★) или удалить (☆).\nИзбранные тикеры отображаются вверху списка.')
+
         label_start = ttk.Label(parent, text="Начальная дата (гггг-мм-дд):")
         label_start.grid(row=1, column=0, padx=5, pady=5, sticky='e')
         self.start_date_entry = ttk.Entry(parent)
         self.start_date_entry.grid(row=1, column=1, padx=5, pady=5, sticky='w')
         self.start_date_entry.insert(0, "2015-01-01")
+        _tip(self.start_date_entry, 'Начальная дата загрузки истории (гггг-мм-дд)')
+        ToolTip(self.start_date_entry, 'Начальная дата периода загрузки исторических свечей.\nФормат: гггг-мм-дд (например 2015-01-01).\nЧем длиннее период — тем точнее бэктест, но дольше загрузка.')
 
         label_end = ttk.Label(parent, text="Конечная дата (гггг-мм-дд):")
         label_end.grid(row=2, column=0, padx=5, pady=5, sticky='e')
         self.end_date_entry = ttk.Entry(parent)
         self.end_date_entry.grid(row=2, column=1, padx=5, pady=5, sticky='w')
         self.end_date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        _tip(self.end_date_entry, 'Конечная дата загрузки истории (гггг-мм-дд)')
+        ToolTip(self.end_date_entry, 'Конечная дата периода загрузки исторических свечей.\nФормат: гггг-мм-дд.\nПо умолчанию — текущая дата.')
 
         parent.grid_rowconfigure(8, weight=1)
 
         self.result_text = tk.Text(parent, height=6, width=55)
         self.result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky='ew')
         _add_copy_menu(self.result_text)
+        ToolTip(self.result_text, 'Журнал загрузки данных и статуса операций.\nПоказывает прогресс, ошибки и количество загруженных свечей.', delay=300)
 
         # Стратегия
         from strategy.config import get_strategy_names
@@ -131,6 +146,7 @@ class StockAppVisual:
             self._strategy_combo.current(0)
         self._strategy_combo.grid(row=4, column=1, padx=5, pady=(5, 0), sticky='w')
         self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
+        ToolTip(self._strategy_combo, 'Выбор торговой стратегии для тестирования.\nПри смене стратегии параметры ниже обновляются автоматически.\nКаждая стратегия использует свой набор индикаторов и правил входа/выхода.')
 
         self._params_frame = ttk.Frame(parent)
         self._params_frame.grid(row=5, column=0, columnspan=2, sticky='ew', padx=5, pady=1)
@@ -145,22 +161,27 @@ class StockAppVisual:
         self.get_data_button = ttk.Button(
             action_frame, text="1. Получить данные", command=on_select)
         self.get_data_button.grid(row=0, column=0, padx=2, pady=1)
+        ToolTip(self.get_data_button, 'Загрузить дневные свечи с MOEX ISS за указанный период.\nДанные кэшируются — повторная загрузка того же тикера быстрее.\nНеобходимо перед запуском бэктеста или оптимизации.')
 
         self.backtest_button = ttk.Button(
             action_frame, text="2. Backtest", command=on_backtest)
         self.backtest_button.grid(row=0, column=1, padx=2, pady=1)
+        ToolTip(self.backtest_button, 'Запустить бэктест выбранной стратегии с текущими параметрами.\nПоказывает: количество сделок, win-rate, профит-фактор,\nмакс. просадку, доходность и кривую equity.')
 
         self.optimize_button = ttk.Button(
             action_frame, text="3. Оптимизация", command=lambda: on_optimize() if on_optimize else None)
         self.optimize_button.grid(row=0, column=2, padx=2, pady=1)
+        ToolTip(self.optimize_button, 'Автоматический подбор параметров стратегии (grid-search).\nПеребирает комбинации и показывает топ-5 результатов.\nМожно применить лучший набор параметров одним кликом.\nТребует предварительно загруженных данных.')
 
         self.portfolio_button = ttk.Button(
             action_frame, text="4. Портфель", command=lambda: on_portfolio() if on_portfolio else None)
         self.portfolio_button.grid(row=1, column=0, padx=2, pady=1)
+        ToolTip(self.portfolio_button, 'Бэктест стратегии на всех тикерах из торгового дневника.\nКапитал распределяется поровну между инструментами.\nПоказывает агрегированную кривую equity и статистику по каждому тикеру.')
 
         self.walkforward_button = ttk.Button(
             action_frame, text="5. Walk-fwd", command=lambda: on_walkforward() if on_walkforward else None)
         self.walkforward_button.grid(row=1, column=1, padx=2, pady=1)
+        ToolTip(self.walkforward_button, 'Walk-forward анализ — проверка устойчивости параметров.\nДанные разбиваются на окна: обучение → тест → сдвиг.\nПоказывает, как стратегия ведёт себя на данных вне выборки.\nПомогает избежать переобучения.')
 
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
@@ -176,28 +197,33 @@ class StockAppVisual:
             btn_row, text="Настройки", width=10,
             command=lambda: self._save_current_settings())
         self.save_settings_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.save_settings_btn, 'Сохранить текущие параметры и стратегию для выбранного тикера.\nПри следующем выборе этого тикера настройки восстановятся автоматически.\nХранится в results/ticker_settings.json')
 
         self.diary_btn = ttk.Button(
             btn_row, text="В дневник", width=9,
             command=lambda: on_diary() if on_diary else None)
         self.diary_btn.pack(side=tk.LEFT, padx=2)
         self.diary_btn.config(state='disabled')
+        ToolTip(self.diary_btn, 'Добавить последний сигнал (с параметрами и результатом)\nв торговый дневник для отслеживания сделок.\nДневник сохраняется в results/diary.json')
 
         self._on_show_settings = on_show_settings
         self._settings_btn = ttk.Button(
             btn_row, text="Индивид.", width=9,
             command=lambda: self._show_settings())
         self._settings_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(self._settings_btn, 'Индивидуальные настройки параметров для конкретного тикера.\nПозволяет задать кастомные уровни стопов и тейков,\nотличающиеся от стандартных параметров стратегии.')
 
         self._save_results_btn = ttk.Button(
             btn_row, text="Сохранить", width=9,
             command=lambda: on_save_results() if on_save_results else None)
         self._save_results_btn.pack(side=tk.LEFT, padx=2)
         self._save_results_btn.config(state='disabled')
+        ToolTip(self._save_results_btn, 'Сохранить результаты последнего бэктеста / оптимизации.\nФорматы: CSV (таблица) или JSON (структурированные данные).\nФайлы сохраняются в папку results/')
 
         self.backtest_text = tk.Text(parent, height=8, width=55)
         self.backtest_text.grid(row=8, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
+        ToolTip(self.backtest_text, 'Результаты бэктеста, оптимизации, портфеля и walk-forward.\nПоказывает статистику сделок, профит-фактор, просадку и т.д.\nПравый клик — копировать выделенное.', delay=300)
 
     def enable_save_results_button(self):
         self._save_results_btn.config(state='normal')
@@ -529,6 +555,7 @@ class StockAppVisual:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+                ToolTip(combo, pcfg.get('hint', ''))
             elif pcfg['key'] == 'trailing_sl':
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=14, font=('', 8),
@@ -536,6 +563,7 @@ class StockAppVisual:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+                ToolTip(combo, pcfg.get('hint', ''))
             elif pcfg['key'] == 'partial_tp':
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=10, font=('', 8),
@@ -577,6 +605,12 @@ class StockAppVisual:
                 entry.insert(0, str(pcfg['default']))
                 self._param_entries[pcfg['key']] = entry
 
+        for pcfg in params_config:
+            entry = self._param_entries.get(pcfg['key'])
+            hint = pcfg.get('hint', '')
+            if entry and hint:
+                ToolTip(entry, hint)
+
     def get_backtest_params(self):
         try:
             from strategy.config import get_strategy_params
@@ -606,6 +640,10 @@ class StockAppVisual:
         except (ValueError, TypeError):
             print(f"Ошибка преобразования параметра {key}: {raw}")
             return None
+
+    def _settings_path(self):
+        import os
+        return os.path.join('results', 'ticker_settings.json')
 
     def _save_current_settings(self):
         ticker = self._extract_ticker(self.stock_combobox.get())
@@ -722,6 +760,7 @@ class ScannerUI:
             self._strategy_combo.current(0)
         self._strategy_combo.grid(row=row, column=0, columnspan=2, sticky='w', padx=5, pady=1)
         self._strategy_combo.bind('<<ComboboxSelected>>', lambda e: self._rebuild_params())
+        ToolTip(self._strategy_combo, 'Выбор стратегии для сканирования.\nКаждая стратегия использует свой набор индикаторов.\nПараметры ниже обновятся автоматически при смене стратегии.')
         row += 1
 
         self._params_frame = ttk.Frame(parent)
@@ -739,11 +778,13 @@ class ScannerUI:
         self.scanner_date_from = ttk.Entry(date_frame, width=12)
         self.scanner_date_from.pack(side=tk.LEFT, padx=2)
         self.scanner_date_from.insert(0, "2015-01-01")
+        ToolTip(self.scanner_date_from, 'Начальная дата периода для сканирования.\nФормат: гггг-мм-дд.\nВлияет на расчёт индикаторов и уровней.')
 
         ttk.Label(date_frame, text="До:").pack(side=tk.LEFT, padx=2)
         self.scanner_date_to = ttk.Entry(date_frame, width=12)
         self.scanner_date_to.pack(side=tk.LEFT, padx=2)
         self.scanner_date_to.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        ToolTip(self.scanner_date_to, 'Конечная дата периода для сканирования.\nФормат: гггг-мм-дд.\nПо умолчанию — текущая дата.')
 
         btn_frame = ttk.Frame(parent)
         btn_frame.grid(row=row, column=0, columnspan=2, pady=5)
@@ -752,28 +793,33 @@ class ScannerUI:
         self.scan_button = ttk.Button(
             btn_frame, text="Запустить сканер", command=on_scan)
         self.scan_button.pack(side=tk.LEFT, padx=5)
+        ToolTip(self.scan_button, 'Запустить сканирование всех эмитентов выбранных секторов.\nПроверяет стратегию на каждом тикере и показывает сигналы.\nПрогресс отображается в полосе ниже.')
 
         self.legend_button = ttk.Button(
             btn_frame, text="Скрыть легенду",
             command=lambda: self._toggle_legend())
         self.legend_button.pack(side=tk.LEFT, padx=5)
+        ToolTip(self.legend_button, 'Показать/скрыть панель легенды сигналов.\nЛегенда объясняет обозначения цветов и значков в результатах.')
 
         self.export_excel_button = ttk.Button(
             btn_frame, text="Экспорт в Excel",
             command=lambda: self._request_excel())
         self.export_excel_button.pack(side=tk.LEFT, padx=5)
         self.export_excel_button.config(state='disabled')
+        ToolTip(self.export_excel_button, 'Экспортировать результаты сканирования в Excel-файл.\nВключает все сигналы, параметры и метрики.\nДоступно после завершения сканирования.')
 
         self.diary_button = ttk.Button(
             btn_frame, text="В дневник",
             command=lambda: self._request_diary())
         self.diary_button.pack(side=tk.LEFT, padx=5)
         self.diary_button.config(state='disabled')
+        ToolTip(self.diary_button, 'Добавить выбранный сигнал в торговый дневник.\nДневник хранится в results/diary.json.\nДоступно после завершения сканирования.')
 
         self.settings_button = ttk.Button(
             btn_frame, text="Индивид. настройки",
             command=lambda: self._request_show_settings())
         self.settings_button.pack(side=tk.LEFT, padx=5)
+        ToolTip(self.settings_button, 'Индивидуальные настройки параметров для тикера.\nПозволяет задать кастомные уровни стопов и тейков\nдля конкретного инструмента.')
 
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
@@ -854,6 +900,7 @@ class ScannerUI:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+                ToolTip(combo, pcfg.get('hint', ''))
             elif pcfg['key'] == 'trailing_sl':
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=14, font=('', 8),
@@ -861,6 +908,7 @@ class ScannerUI:
                 combo.current(pcfg['default'])
                 combo.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 self._param_entries[pcfg['key']] = combo
+                ToolTip(combo, pcfg.get('hint', ''))
             elif pcfg['key'] == 'partial_tp':
                 combo = ttk.Combobox(
                     self._params_frame, state='readonly', width=10, font=('', 8),
@@ -901,6 +949,12 @@ class ScannerUI:
                 entry.grid(row=row_num, column=col + 1, padx=(0, 4), sticky='w')
                 entry.insert(0, str(pcfg['default']))
                 self._param_entries[pcfg['key']] = entry
+
+        for pcfg in params_config:
+            entry = self._param_entries.get(pcfg['key'])
+            hint = pcfg.get('hint', '')
+            if entry and hint:
+                ToolTip(entry, hint)
 
     def _toggle_legend(self):
         if self._legend_frame.winfo_viewable():

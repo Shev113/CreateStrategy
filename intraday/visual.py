@@ -3,7 +3,9 @@ from tkinter import ttk, messagebox as mb
 import threading
 import logging
 from datetime import datetime
+import urllib3
 import numpy as np
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import pandas as pd
 
 from visual import _add_copy_menu
@@ -207,7 +209,7 @@ class IntradayUI:
             tw = tk.Toplevel(widget)
             tw.wm_overrideredirect(True)
             tw.wm_geometry(f'+{event.x_root + 10}+{event.y_root + 10}')
-            lbl = ttk.Label(tw, text=text, background='lightyellow', relief='solid', padding=3)
+            lbl = ttk.Label(tw, text=text, background='lightyellow', foreground='black', relief='solid', padding=3)
             lbl.pack()
         def hide(event):
             nonlocal tw
@@ -270,7 +272,7 @@ class IntradayUI:
                 while cur < end_dt:
                     nxt = min(cur + step, end_dt)
                     params = {'from': cur.strftime('%Y-%m-%d'), 'till': nxt.strftime('%Y-%m-%d'), 'interval': H1_INTERVAL}
-                    resp = requests.get(url, params=params, timeout=15)
+                    resp = requests.get(url, params=params, timeout=15, verify=False)
                     resp.raise_for_status()
                     data = resp.json()
                     if 'candles' in data and 'data' in data['candles']:
