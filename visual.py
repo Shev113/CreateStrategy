@@ -41,6 +41,7 @@ class StockAppVisual:
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
                  on_optimize=None, on_portfolio=None, on_walkforward=None,
+                 on_sensitivity=None,
                  favorites=None, on_toggle_favorite=None,
                  sector_db=None):
         self.root = parent.winfo_toplevel()
@@ -57,7 +58,7 @@ class StockAppVisual:
 
         left_frame = ttk.Frame(parent)
         left_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
-        left_frame.grid_rowconfigure(8, weight=1)
+        left_frame.grid_rowconfigure(9, weight=1)
 
         chart_frame = ttk.Frame(parent)
         chart_frame.grid(row=0, column=1, sticky='nsew')
@@ -183,6 +184,11 @@ class StockAppVisual:
         self.walkforward_button.grid(row=1, column=1, padx=2, pady=1)
         ToolTip(self.walkforward_button, 'Walk-forward анализ — проверка устойчивости параметров.\nДанные разбиваются на окна: обучение → тест → сдвиг.\nПоказывает, как стратегия ведёт себя на данных вне выборки.\nПомогает избежать переобучения.')
 
+        self.sensitivity_button = ttk.Button(
+            action_frame, text="6. Чувств.", command=lambda: on_sensitivity() if on_sensitivity else None)
+        self.sensitivity_button.grid(row=1, column=2, padx=2, pady=1)
+        ToolTip(self.sensitivity_button, 'Анализ чувствительности — насколько результат зависит от параметров.\nВарьирует каждый параметр ±5/10/20% и показывает влияние на Sharpe.\nПомогает понять, какие параметры критичны, а какие нет.')
+
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
         action_frame.grid_columnconfigure(2, weight=1)
@@ -220,8 +226,37 @@ class StockAppVisual:
         self._save_results_btn.config(state='disabled')
         ToolTip(self._save_results_btn, 'Сохранить результаты последнего бэктеста / оптимизации.\nФорматы: CSV (таблица) или JSON (структурированные данные).\nФайлы сохраняются в папку results/')
 
+        risk_frame = ttk.LabelFrame(parent, text='Лимиты портфеля')
+        risk_frame.grid(row=8, column=0, columnspan=2, padx=5, pady=(2, 0), sticky='ew')
+
+        ttk.Label(risk_frame, text='Макс. поз.').grid(row=0, column=0, padx=2, sticky='e')
+        self.max_positions_entry = ttk.Entry(risk_frame, width=5)
+        self.max_positions_entry.insert(0, '5')
+        self.max_positions_entry.grid(row=0, column=1, padx=2)
+        ToolTip(self.max_positions_entry, 'Максимальное число одновременно открытых позиций.\n0 = без лимита. При достижении лимита новые входы блокируются.')
+
+        ttk.Label(risk_frame, text='Стоп-DD %').grid(row=0, column=2, padx=2, sticky='e')
+        self.max_drawdown_entry = ttk.Entry(risk_frame, width=5)
+        self.max_drawdown_entry.insert(0, '15')
+        self.max_drawdown_entry.grid(row=0, column=3, padx=2)
+        ToolTip(self.max_drawdown_entry, 'Портфельный стоп при просадке (%).\nЕсли просадка портфеля >= порога — новые входы блокируются.\n0 = без лимита.')
+
+        ttk.Label(risk_frame, text='Охлаждение').grid(row=0, column=4, padx=2, sticky='e')
+        self.cooldown_entry = ttk.Entry(risk_frame, width=5)
+        self.cooldown_entry.insert(0, '0')
+        self.cooldown_entry.grid(row=0, column=5, padx=2)
+        ToolTip(self.cooldown_entry, 'Число свечей после срабатывания стоп-просадки,\nпрежде чем разрешить новые входы.\n0 = возобновить входы сразу после снижения просадки.')
+
+        ttk.Label(risk_frame, text='Сектор %').grid(row=0, column=6, padx=2, sticky='e')
+        self.sector_exposure_entry = ttk.Entry(risk_frame, width=5)
+        self.sector_exposure_entry.insert(0, '30')
+        self.sector_exposure_entry.grid(row=0, column=7, padx=2)
+        ToolTip(self.sector_exposure_entry, 'Макс. доля капитала в одном секторе (%).\n30 = не более 30% капитала в одном секторе.\n0 = без лимита. Требуется загрузка секторов.')
+
+        parent.grid_rowconfigure(9, weight=1)
+
         self.backtest_text = tk.Text(parent, height=8, width=55)
-        self.backtest_text.grid(row=8, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.backtest_text.grid(row=9, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
         ToolTip(self.backtest_text, 'Результаты бэктеста, оптимизации, портфеля и walk-forward.\nПоказывает статистику сделок, профит-фактор, просадку и т.д.\nПравый клик — копировать выделенное.', delay=300)
 
@@ -639,6 +674,21 @@ class StockAppVisual:
             return params
         except (ValueError, TypeError):
             print(f"Ошибка преобразования параметра {key}: {raw}")
+            return None
+
+    def get_portfolio_risk_params(self):
+        try:
+            max_pos = int(self.max_positions_entry.get().strip())
+            max_dd = float(self.max_drawdown_entry.get().strip())
+            cooldown = int(self.cooldown_entry.get().strip())
+            sector_pct = float(self.sector_exposure_entry.get().strip())
+            return {
+                'max_open_positions': max_pos,
+                'max_drawdown_pct': max_dd,
+                'cooldown_bars': cooldown,
+                'max_sector_exposure': sector_pct / 100.0,
+            }
+        except (ValueError, TypeError):
             return None
 
     def _settings_path(self):
@@ -1692,160 +1742,886 @@ class AppGuideUI:
 
         _add_copy_menu(text)
 
-        lines = [
-            "╔" + "═" * 58 + "╗",
-            "║  CreateStrategy — система тестирования и оптимизации         ║",
-            "║  торговых стратегий на данных MOEX                          ║",
-            "╚" + "═" * 58 + "╝",
-            "",
-            "",
-            "1. ВКЛАДКА «АНАЛИЗ»",
-            "─" * 60,
-            "",
-            "  Кнопка 1 «Получить данные» — загружает исторические свечи",
-            "  выбранного тикера с MOEX за указанный период.",
-            "",
-            "  Кнопка 2 «Запустить Backtest» — запускает выбранную стратегию",
-            "  с текущими параметрами. Результат: количество сделок, доходность,",
-            "  Sharpe, Profit Factor, просадка.",
-            "",
-            "  Кнопка 3 «Оптимизация» — grid search по сетке параметров.",
-            "  Топ-5 комбинаций выводятся с кликабельным [Применить].",
-            "  При нажатии параметры заполняются в UI и сохраняются в ticker_settings.json.",
-            "",
-            "  Кнопка 4 «Портфельный бэктест» — запуск backtest на всех тикерах",
-            "  из торгового дневника. Капитал делится поровну. Выводятся общие",
-            "  метрики портфеля и разбивка по тикерам.",
-            "",
-            "  Кнопка 5 «Walk-forward» — проверка стабильности параметров.",
-            "  Данные делятся на окна (IS/OOS), оптимизация на IS, тест на OOS.",
-            "  Если среднее OOS/IS < 30% — стратегия нестабильна.",
-            "",
-            "",
-            "2. ПАРАМЕТРЫ СТРАТЕГИИ",
-            "─" * 60,
-            "",
-            "  capital           — стартовый капитал в рублях",
-            "  risk_per_trade    — риск на сделку в % от капитала",
-            "  atr_sl            — множитель ATR для стоп-лосса",
-            "  atr_tp            — множитель ATR для тейк-профита",
-            "  min_hits          — минимальное число касаний уровня для входа",
-            "  max_hold          — максимальное количество свечей удержания",
-            "  commission        — комиссия брокера в %",
-            "  entry_type        — 0: вход по open, 1: лимитный по цене сигнала",
-            "",
-            "  risk_per_trade и commission задаются в % (например 2.0 = 2%).",
-            "  Внутри расчёта они делятся на 100.",
-            "",
-            "",
-            "3. УПРАВЛЕНИЕ РИСКОМ И ВЫХОДОМ",
-            "─" * 60,
-            "",
-            "  Трейлинг-стоп:",
-            "    0 — выключен",
-            "    1 — фиксированный отступ от максимума (в ATR)",
-            "    2 — по скользящей средней (MA от close)",
-            "    trailing_activation — при какой прибыли в ATR активировать",
-            "    trailing_offset — отступ от экстремума в ATR",
-            "    trailing_ma_period — период MA для режима 2",
-            "",
-            "  Частичное фиксирование:",
-            "    partial_tp — 0: выкл, 1: вкл",
-            "    partial_tp_ratio1 — первый тейк (в ATR)",
-            "    partial_tp_ratio2 — второй тейк (в ATR)",
-            "    partial_tp_size1 — доля позиции для TP1",
-            "",
-            "  Pivot-уровни:",
-            "    use_pivot_levels — 0: частотный метод, 1: pivot detection",
-            "    pivot_lookback — свечей с каждой стороны для пивота",
-            "",
-            "  MTF-фильтр (Multi-Timeframe):",
-            "    use_mtf_filter  — 0: выкл, 1: вкл",
-            "    mtf_ma_period   — период MA на недельных свечах",
-            "    BUY только когда weekly close > weekly MA,",
-            "    SELL только когда weekly close < weekly MA.",
-            "",
-            "  Размер позиции:",
-            "    0 — фиксированный риск (как было)",
-            "    1 — Kelly Criterion (доля от капитала = f*)",
-            "    2 — ATR-зависимый (обратно пропорционально волатильности)",
-            "    kelly_fraction — доля от Kelly (0.0–1.0)",
-            "    atr_sizing_mult — множитель ATR для режима 2",
-            "",
-            "",
-            "4. АНСАМБЛЬ СТРАТЕГИЙ",
-            "─" * 60,
-            "",
-            "  Объединяет несколько стратегий голосованием.",
-            "  sub_strategies — ID через запятую (bounce,fisher,trend,...)",
-            "  vote_method:",
-            "    0 — большинство (>50% голосов за BUY/SELL)",
-            "    1 — любой сигнал (первое совпадение)",
-            "    2 — консенсус (все стратегии должны согласиться)",
-            "",
-            "  SL/TP консервативные: худший SL (самый узкий) и худший TP",
-            "  (дальний для BUY, ближний для SELL).",
-            "",
-            "",
-            "5. СОКРАЩЕНИЯ",
-            "─" * 60,
-            "",
-            "  ATR    Average True Range",
-            "  SL     Stop Loss",
-            "  TP     Take Profit",
-            "  MA     Moving Average",
-            "  SMA    Simple Moving Average",
-            "  EMA    Exponential Moving Average",
-            "  MTF    Multi-Timeframe",
-            "  DD     Drawdown (максимальная просадка)",
-            "  PF     Profit Factor (валовая прибыль / валовый убыток)",
-            "  IS     In-Sample (обучающий период)",
-            "  OOS    Out-Of-Sample (тестовый период)",
-            "  RSI    Relative Strength Index",
-            "  ROC    Rate of Change",
-            "  TSI    True Strength Index",
-            "  ECO    Ehlers Cyber Cycle",
-            "  COG    Center of Gravity",
-            "  TCF    Time Cycle Factor",
-            "  HV     Historical Volatility",
-            "  BB     Bollinger Bands",
-            "  MACD   Moving Average Convergence Divergence",
-            "  DMI    Directional Movement Index",
-            "  ADX    Average Directional Index",
-            "",
-            "",
-            "6. ВКЛАДКА «СКАНЕР»",
-            "─" * 60,
-            "",
-            "  Сканирует все тикеры выбранных секторов MOEX.",
-            "  Для каждого тикера запускается backtest с текущей стратегией.",
-            "  Отбираются лучшие сигналы. Возможен экспорт в Excel",
-            "  и добавление в торговый дневник.",
-            "",
-            "",
-            "7. ВКЛАДКА «УМНЫЙ СКАНЕР»",
-            "─" * 60,
-            "",
-            "  Multi-timeframe сканер: сигналы на H1 с подтверждением по D1.",
-            "  Использует внутридневные стратегии Solabuto.",
-            "",
-            "",
-            "8. ВКЛАДКА «ДНЕВНИК СДЕЛОК»",
-            "─" * 60,
-            "",
-            "  Таблица открытых/закрытых позиций. Автоматическая проверка",
-            "  стоп-лоссов и тейк-профитов по текущим рыночным данным.",
-            "  Экспорт/импорт в JSON, группировка по статусу.",
-            "",
-            "",
-            "9. ВКЛАДКА «ИНТРАДЕЙ»",
-            "─" * 60,
-            "",
-            "  Бэктестинг и сканирование на часовых (H1) данных.",
-            "  Стратегии Solabuto для внутридневной торговли.",
-        ]
+        from guide_text import GUIDE_LINES as lines
 
         text.configure(state='normal')
         text.insert('1.0', '\n'.join(lines))
         text.configure(state='disabled')
         text.see('1.0')
+
+
+class PositionDashboardUI:
+    COLUMNS = ('ticker', 'side', 'entry_price', 'current_price', 'pnl',
+               'pnl_pct', 'sl_price', 'tp_price', 'dist_sl', 'dist_tp', 'status')
+
+    HEADERS = {
+        'ticker': 'Тикер', 'side': 'Напр.', 'entry_price': 'Вход',
+        'current_price': 'Текущая', 'pnl': 'P&L (₽)', 'pnl_pct': 'P&L %',
+        'sl_price': 'SL', 'tp_price': 'TP',
+        'dist_sl': 'До SL %', 'dist_tp': 'До TP %', 'status': 'Статус',
+    }
+
+    WIDTHS = {
+        'ticker': 70, 'side': 55, 'entry_price': 80, 'current_price': 80,
+        'pnl': 90, 'pnl_pct': 70, 'sl_price': 75, 'tp_price': 75,
+        'dist_sl': 70, 'dist_tp': 70, 'status': 80,
+    }
+
+    STATUS_LABELS = {
+        'profit': 'В прибыли',
+        'loss': 'В убытке',
+        'near_sl': 'Близко SL',
+        'near_tp': 'Близко TP',
+        'ok': 'Нейтрально',
+    }
+
+    def __init__(self, parent, on_refresh=None, on_start_monitor=None,
+                 on_stop_monitor=None):
+        self.parent = parent
+        self._on_refresh = on_refresh
+        self._on_start_monitor = on_start_monitor
+        self._on_stop_monitor = on_stop_monitor
+        self._monitor_running = False
+
+        top_frame = ttk.Frame(parent)
+        top_frame.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl_frame = ttk.Frame(top_frame)
+        ctrl_frame.pack(fill=tk.X, pady=(0, 5))
+
+        self.refresh_btn = ttk.Button(ctrl_frame, text='Обновить сейчас',
+                                      command=self._on_refresh_click)
+        self.refresh_btn.pack(side=tk.LEFT, padx=2)
+
+        self.monitor_btn = ttk.Button(ctrl_frame, text='Запустить монитор',
+                                       command=self._toggle_monitor)
+        self.monitor_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.monitor_btn, 'Автоматическая периодическая проверка открытых позиций.\nПредупреждает о приближении к SL/TP и срабатывании.')
+
+        ttk.Label(ctrl_frame, text='Интервал (мин):').pack(side=tk.LEFT, padx=(10, 2))
+        self.interval_entry = ttk.Entry(ctrl_frame, width=4)
+        self.interval_entry.insert(0, '5')
+        self.interval_entry.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.interval_entry, 'Интервал авто-проверки в минутах (мин. 0.5).')
+
+        ttk.Label(ctrl_frame, text='Порог близости %:').pack(side=tk.LEFT, padx=(10, 2))
+        self.near_entry = ttk.Entry(ctrl_frame, width=4)
+        self.near_entry.insert(0, '3')
+        self.near_entry.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.near_entry, 'Расстояние до SL/TP в % от цены входа,\nпри котором выводится предупреждение.')
+
+        self.status_label = ttk.Label(ctrl_frame, text='Монитор: остановлен')
+        self.status_label.pack(side=tk.RIGHT, padx=5)
+
+        tree_frame = ttk.Frame(top_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.tree = ttk.Treeview(
+            tree_frame, columns=self.COLUMNS, show='headings',
+            height=15, selectmode='browse'
+        )
+
+        for col in self.COLUMNS:
+            self.tree.heading(col, text=self.HEADERS[col])
+            self.tree.column(col, width=self.WIDTHS[col], anchor='center')
+
+        scroll_y = ttk.Scrollbar(tree_frame, orient='vertical',
+                                  command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll_y.set)
+
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.tag_configure('profit', foreground='#00aa00')
+        self.tree.tag_configure('loss', foreground='#cc0000')
+        self.tree.tag_configure('near_sl', foreground='#ff8800')
+        self.tree.tag_configure('near_tp', foreground='#0088ff')
+        self.tree.tag_configure('ok', foreground='')
+
+        self.alert_text = tk.Text(top_frame, height=4, width=80, state='disabled')
+        self.alert_text.pack(fill=tk.X, pady=(5, 0))
+
+    def _on_refresh_click(self):
+        if self._on_refresh:
+            self._on_refresh()
+
+    def _toggle_monitor(self):
+        if self._monitor_running:
+            if self._on_stop_monitor:
+                self._on_stop_monitor()
+            self._monitor_running = False
+            self.monitor_btn.config(text='Запустить монитор')
+            self.status_label.config(text='Монитор: остановлен')
+        else:
+            if self._on_start_monitor:
+                self._on_start_monitor()
+            self._monitor_running = True
+            self.monitor_btn.config(text='Остановить монитор')
+            self.status_label.config(text='Монитор: активен')
+
+    def set_monitor_running(self, running):
+        self._monitor_running = running
+        if running:
+            self.monitor_btn.config(text='Остановить монитор')
+            self.status_label.config(text='Монитор: активен')
+        else:
+            self.monitor_btn.config(text='Запустить монитор')
+            self.status_label.config(text='Монитор: остановлен')
+
+    def get_interval_sec(self):
+        try:
+            val = float(self.interval_entry.get().strip())
+            return max(val * 60, 30)
+        except (ValueError, TypeError):
+            return 300
+
+    def get_near_distance_pct(self):
+        try:
+            return float(self.near_entry.get().strip())
+        except (ValueError, TypeError):
+            return 3.0
+
+    def update_positions(self, positions):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for p in positions:
+            status = p.get('status', 'ok')
+            tag = status if status in ('profit', 'loss', 'near_sl', 'near_tp') else 'ok'
+            values = (
+                p.get('ticker', ''),
+                p.get('side', ''),
+                f"{p.get('entry_price', 0):.2f}" if p.get('entry_price') else '',
+                f"{p.get('current_price', 0):.2f}" if p.get('current_price') else '—',
+                f"{p.get('pnl', 0):+.2f}" if p.get('pnl') is not None else '—',
+                f"{p.get('pnl_pct', 0):+.2f}" if p.get('pnl_pct') is not None else '—',
+                f"{p.get('sl_price', 0):.2f}" if p.get('sl_price') else '',
+                f"{p.get('tp_price', 0):.2f}" if p.get('tp_price') else '',
+                f"{p.get('distance_sl_pct', 0):.1f}" if p.get('distance_sl_pct') is not None else '—',
+                f"{p.get('distance_tp_pct', 0):.1f}" if p.get('distance_tp_pct') is not None else '—',
+                self.STATUS_LABELS.get(status, status),
+            )
+            self.tree.insert('', 'end', values=values, tags=(tag,))
+
+    def update_alerts(self, alerts):
+        self.alert_text.configure(state='normal')
+        self.alert_text.delete('1.0', tk.END)
+        if alerts:
+            lines = []
+            for a in alerts:
+                if a.ticker:
+                    lines.append(f"⚠ {a.message}")
+                else:
+                    lines.append(f"📋 {a.message}")
+            self.alert_text.insert(tk.END, '\n'.join(lines))
+        else:
+            self.alert_text.insert(tk.END, 'Предупреждений нет.')
+        self.alert_text.configure(state='disabled')
+
+
+class TradeReviewUI:
+    BREAKDOWN_COLS = ('key', 'count', 'wins', 'win_rate', 'pnl')
+    BREAKDOWN_HEADERS = {
+        'key': 'Категория', 'count': 'Сделок', 'wins': 'Выигрышей',
+        'win_rate': 'WR %', 'pnl': 'P&L',
+    }
+    BREAKDOWN_WIDTHS = {
+        'key': 120, 'count': 60, 'wins': 75, 'win_rate': 60, 'pnl': 100,
+    }
+
+    def __init__(self, parent, on_refresh=None):
+        self.parent = parent
+        self._on_refresh = on_refresh
+        self._last_result = None
+
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl_frame = ttk.Frame(main_frame)
+        ctrl_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Button(ctrl_frame, text='Обновить анализ',
+                   command=self._refresh).pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(ctrl_frame, text='Капитал:').pack(side=tk.LEFT, padx=(15, 2))
+        self.capital_entry = ttk.Entry(ctrl_frame, width=12)
+        self.capital_entry.insert(0, '1000000')
+        self.capital_entry.pack(side=tk.LEFT, padx=2)
+
+        self.summary_label = ttk.Label(ctrl_frame, text='', font=('', 9))
+        self.summary_label.pack(side=tk.RIGHT, padx=5)
+
+        paned = ttk.PanedWindow(main_frame, orient=tk.VERTICAL)
+        paned.pack(fill=tk.BOTH, expand=1)
+
+        top_pane = ttk.Frame(paned)
+        paned.add(top_pane, weight=2)
+
+        mid_pane = ttk.Frame(paned)
+        paned.add(mid_pane, weight=2)
+
+        bot_pane = ttk.Frame(paned)
+        paned.add(bot_pane, weight=1)
+
+        self.report_text = tk.Text(top_pane, wrap=tk.WORD, font=('Consolas', 9))
+        report_scroll = ttk.Scrollbar(top_pane, orient='vertical',
+                                       command=self.report_text.yview)
+        self.report_text.configure(yscrollcommand=report_scroll.set)
+        self.report_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        report_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        breakdown_nb = ttk.Notebook(mid_pane)
+        breakdown_nb.pack(fill=tk.BOTH, expand=1)
+
+        self.ticker_frame = ttk.Frame(breakdown_nb)
+        self.side_frame = ttk.Frame(breakdown_nb)
+        self.reason_frame = ttk.Frame(breakdown_nb)
+        self.month_frame = ttk.Frame(breakdown_nb)
+        self.dow_frame = ttk.Frame(breakdown_nb)
+
+        breakdown_nb.add(self.ticker_frame, text='По тикерам')
+        breakdown_nb.add(self.side_frame, text='По направлению')
+        breakdown_nb.add(self.reason_frame, text='По причине')
+        breakdown_nb.add(self.month_frame, text='По месяцам')
+        breakdown_nb.add(self.dow_frame, text='По дням')
+
+        self.ticker_tree = self._make_breakdown_tree(self.ticker_frame)
+        self.side_tree = self._make_breakdown_tree(self.side_frame)
+        self.reason_tree = self._make_breakdown_tree(self.reason_frame)
+        self.month_tree = self._make_breakdown_tree(self.month_frame)
+        self.dow_tree = self._make_breakdown_tree(self.dow_frame)
+
+        self.chart_canvas = None
+        self.chart_frame = bot_pane
+
+    def _make_breakdown_tree(self, parent):
+        tree = ttk.Treeview(parent, columns=self.BREAKDOWN_COLS,
+                            show='headings', height=8)
+        for col in self.BREAKDOWN_COLS:
+            tree.heading(col, text=self.BREAKDOWN_HEADERS[col])
+            tree.column(col, width=self.BREAKDOWN_WIDTHS[col], anchor='center')
+        scroll = ttk.Scrollbar(parent, orient='vertical', command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.tag_configure('positive', foreground='#00aa00')
+        tree.tag_configure('negative', foreground='#cc0000')
+        return tree
+
+    def _refresh(self):
+        if self._on_refresh:
+            self._on_refresh()
+
+    def get_capital(self):
+        try:
+            return float(self.capital_entry.get().strip())
+        except (ValueError, TypeError):
+            return 1_000_000
+
+    def update_review(self, result):
+        self._last_result = result
+
+        from diary.trade_review_format import format_review_report
+        report = format_review_report(result)
+
+        self.report_text.configure(state='normal')
+        self.report_text.delete('1.0', tk.END)
+        self.report_text.insert(tk.END, report)
+        self.report_text.configure(state='disabled')
+
+        wr_color = '#00aa00' if result.win_rate >= 50 else '#cc0000'
+        pnl_color = '#00aa00' if result.total_pnl >= 0 else '#cc0000'
+        self.summary_label.configure(
+            text=f"Сделок: {result.closed_trades} | WR: {result.win_rate:.1f}% | "
+                 f"P&L: {result.total_pnl:+,.0f} RUB | DD: -{result.max_drawdown:.1f}%"
+        )
+
+        self._fill_tree(self.ticker_tree, result.by_ticker)
+        self._fill_tree(self.side_tree, result.by_side,
+                        key_labels={'LONG': 'Лонг', 'SHORT': 'Шорт'})
+        self._fill_tree(self.reason_tree, result.by_reason,
+                        key_labels={'SL': 'По SL', 'TP': 'По TP',
+                                    'TIMEOUT': 'Таймаут', 'Вручную': 'Вручную'})
+        self._fill_tree(self.month_tree, result.by_month)
+        self._fill_tree(self.dow_tree, result.by_dow)
+
+        self._draw_chart(result)
+
+    def _fill_tree(self, tree, data, key_labels=None):
+        for row in tree.get_children():
+            tree.delete(row)
+
+        sorted_items = sorted(data.items(), key=lambda x: x[1]['pnl'], reverse=True)
+        for key, d in sorted_items:
+            label = (key_labels.get(key, key) if key_labels else key)
+            tag = 'positive' if d['pnl'] >= 0 else 'negative'
+            tree.insert('', 'end', values=(
+                label,
+                d['count'],
+                d['wins'],
+                f"{d['win_rate']:.1f}",
+                f"{d['pnl']:+,.2f}",
+            ), tags=(tag,))
+
+    def _draw_chart(self, result):
+        if self.chart_canvas is not None:
+            self.chart_canvas.get_tk_widget().destroy()
+            self.chart_canvas = None
+
+        for w in self.chart_frame.winfo_children():
+            w.destroy()
+
+        if len(result.equity_curve) < 2:
+            ttk.Label(self.chart_frame,
+                      text='Недостаточно данных для графика').pack(pady=20)
+            return
+
+        try:
+            import matplotlib
+            matplotlib.use('TkAgg')
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        except ImportError:
+            return
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 3),
+                                        gridspec_kw={'height_ratios': [3, 1]})
+
+        dates = result.dates
+        if not dates:
+            dates = list(range(len(result.equity_curve)))
+
+        step = max(1, len(dates) // 20)
+        tick_positions = list(range(0, len(dates), step))
+
+        ax1.plot(result.equity_curve, linewidth=1.2, color='#2196F3')
+        ax1.fill_between(range(len(result.equity_curve)),
+                         result.equity_curve[0],
+                         result.equity_curve, alpha=0.15, color='#2196F3')
+        ax1.set_ylabel('Капитал')
+        ax1.set_title('Equity + Просадка')
+        if tick_positions:
+            ax1.set_xticks(tick_positions)
+            ax1.set_xticklabels([dates[i] if i < len(dates) else '' for i in tick_positions],
+                                rotation=45, fontsize=7)
+
+        ax2.fill_between(range(len(result.drawdown_curve)),
+                         result.drawdown_curve, color='#cc0000', alpha=0.4)
+        ax2.set_ylabel('DD %')
+        ax2.set_xlabel('Сделки')
+        if tick_positions:
+            ax2.set_xticks(tick_positions)
+            ax2.set_xticklabels([dates[i] if i < len(dates) else '' for i in tick_positions],
+                                rotation=45, fontsize=7)
+
+        fig.tight_layout()
+
+        self.chart_canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
+        self.chart_canvas.draw()
+        self.chart_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+
+
+class NotificationSettingsUI:
+    def __init__(self, parent, notification_manager, on_close=None):
+        self.parent = parent
+        self.root = parent.winfo_toplevel()
+        self.nm = notification_manager
+        self._on_close = on_close
+
+        win = tk.Toplevel(self.root)
+        win.title('Настройки уведомлений')
+        win.geometry('520x580')
+        win.resizable(False, False)
+        self.win = win
+
+        main = ttk.Frame(win, padding=10)
+        main.pack(fill=tk.BOTH, expand=1)
+
+        gen_frame = ttk.LabelFrame(main, text='Общие', padding=5)
+        gen_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.toast_var = tk.BooleanVar(value=self.nm.toast_enabled)
+        ttk.Checkbutton(gen_frame, text='Всплывающие уведомления (Windows toast)',
+                        variable=self.toast_var).pack(anchor='w')
+
+        self.sound_var = tk.BooleanVar(value=self.nm.sound_enabled)
+        ttk.Checkbutton(gen_frame, text='Звуковые сигналы',
+                        variable=self.sound_var).pack(anchor='w')
+
+        thresh_frame = ttk.Frame(gen_frame)
+        thresh_frame.pack(fill=tk.X, pady=(5, 0))
+        ttk.Label(thresh_frame, text='Порог просадки (%):').pack(side=tk.LEFT)
+        self.dd_entry = ttk.Entry(thresh_frame, width=6)
+        self.dd_entry.insert(0, str(self.nm.drawdown_threshold))
+        self.dd_entry.pack(side=tk.LEFT, padx=5)
+
+        near_frame = ttk.Frame(gen_frame)
+        near_frame.pack(fill=tk.X, pady=(5, 0))
+        ttk.Label(near_frame, text='Близость к SL/TP (%):').pack(side=tk.LEFT)
+        self.near_entry = ttk.Entry(near_frame, width=6)
+        self.near_entry.insert(0, str(self.nm.near_distance_pct))
+        self.near_entry.pack(side=tk.LEFT, padx=5)
+
+        trig_frame = ttk.LabelFrame(main, text='Триггеры уведомлений', padding=5)
+        trig_frame.pack(fill=tk.X, pady=(0, 10))
+
+        from monitoring.notification_manager import TRIGGER_TYPES
+        self.trigger_vars = {}
+        for trig_type, label in TRIGGER_TYPES.items():
+            var = tk.BooleanVar(value=self.nm.triggers.get(trig_type, False))
+            self.trigger_vars[trig_type] = var
+            ttk.Checkbutton(trig_frame, text=label, variable=var).pack(anchor='w')
+
+        hist_frame = ttk.LabelFrame(main, text='История уведомлений', padding=5)
+        hist_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        hist_cols = ('time', 'trigger', 'title', 'message')
+        hist_headers = {'time': 'Время', 'trigger': 'Тип', 'title': 'Заголовок', 'message': 'Сообщение'}
+        hist_widths = {'time': 120, 'trigger': 100, 'title': 130, 'message': 200}
+
+        self.hist_tree = ttk.Treeview(hist_frame, columns=hist_cols, show='headings', height=8)
+        for col in hist_cols:
+            self.hist_tree.heading(col, text=hist_headers[col])
+            self.hist_tree.column(col, width=hist_widths[col], anchor='w')
+        scroll = ttk.Scrollbar(hist_frame, orient='vertical', command=self.hist_tree.yview)
+        self.hist_tree.configure(yscrollcommand=scroll.set)
+        self.hist_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.hist_tree.tag_configure('warning', foreground='#cc6600')
+        self.hist_tree.tag_configure('error', foreground='#cc0000')
+
+        self._refresh_history()
+
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill=tk.X)
+
+        ttk.Button(btn_frame, text='Очистить историю',
+                   command=self._clear_history).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Отметить прочитанными',
+                   command=self._ack_all).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Тест уведомления',
+                   command=self._test_toast).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Сохранить',
+                   command=self._save).pack(side=tk.RIGHT, padx=2)
+
+    def _refresh_history(self):
+        for row in self.hist_tree.get_children():
+            self.hist_tree.delete(row)
+
+        from monitoring.notification_manager import TRIGGER_TYPES
+        for n in reversed(self.nm.history):
+            trig_label = TRIGGER_TYPES.get(n.trigger_type, n.trigger_type)
+            tag = 'warning' if n.icon == 'warning' else ('error' if n.icon == 'error' else '')
+            self.hist_tree.insert('', 'end', values=(
+                n.timestamp, trig_label, n.title, n.message[:80],
+            ), tags=(tag,))
+
+    def _clear_history(self):
+        self.nm.clear_history()
+        self._refresh_history()
+
+    def _ack_all(self):
+        self.nm.ack_all()
+
+    def _test_toast(self):
+        from monitoring.toast import show_toast
+        show_toast('Тест', 'Уведомления работают!', icon='info', duration=4)
+        self.nm.notify('sl_hit', 'Тест', 'Тестовое уведомление', icon='info')
+        self._refresh_history()
+
+    def _save(self):
+        try:
+            dd = float(self.dd_entry.get().strip())
+            near = float(self.near_entry.get().strip())
+        except (ValueError, TypeError):
+            dd = self.nm.drawdown_threshold
+            near = self.nm.near_distance_pct
+
+        config = {
+            'triggers': {k: v.get() for k, v in self.trigger_vars.items()},
+            'drawdown_threshold': dd,
+            'near_distance_pct': near,
+            'toast_enabled': self.toast_var.get(),
+            'sound_enabled': self.sound_var.get(),
+        }
+        self.nm.set_trigger_config(config)
+        self.win.destroy()
+        if self._on_close:
+            self._on_close()
+
+
+class PerformanceAnalyticsUI:
+    CHART_NAMES = [
+        ('equity', 'Equity + DD'),
+        ('pnl_dist', 'Распределение P&L'),
+        ('r_dist', 'R-multiples'),
+        ('monthly', 'По месяцам'),
+        ('rolling_wr', 'Скользящий WR'),
+        ('rolling_pnl', 'Скользящий P&L'),
+    ]
+
+    def __init__(self, parent, on_analyze=None):
+        self.parent = parent
+        self._on_analyze = on_analyze
+        self._last_metrics = None
+        self._last_trades = None
+
+        main = ttk.Frame(parent)
+        main.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl = ttk.Frame(main)
+        ctrl.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Button(ctrl, text='Анализировать',
+                   command=self._analyze).pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(ctrl, text='Бенчмарк:').pack(side=tk.LEFT, padx=(15, 2))
+        self.bench_var = tk.StringVar(value='IMOEX')
+        bench_cb = ttk.Combobox(ctrl, textvariable=self.bench_var,
+                                values=['Нет', 'IMOEX'], width=10, state='readonly')
+        bench_cb.pack(side=tk.LEFT, padx=2)
+
+        self.status_label = ttk.Label(ctrl, text='', font=('', 9))
+        self.status_label.pack(side=tk.RIGHT, padx=5)
+
+        paned = ttk.PanedWindow(main, orient=tk.VERTICAL)
+        paned.pack(fill=tk.BOTH, expand=1)
+
+        top_pane = ttk.Frame(paned)
+        paned.add(top_pane, weight=1)
+
+        self.report_text = tk.Text(top_pane, wrap=tk.WORD, font=('Consolas', 9))
+        report_scroll = ttk.Scrollbar(top_pane, orient='vertical',
+                                       command=self.report_text.yview)
+        self.report_text.configure(yscrollcommand=report_scroll.set)
+        self.report_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        report_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        chart_pane = ttk.Frame(paned)
+        paned.add(chart_pane, weight=2)
+
+        chart_ctrl = ttk.Frame(chart_pane)
+        chart_ctrl.pack(fill=tk.X, pady=(0, 2))
+
+        ttk.Label(chart_ctrl, text='График:').pack(side=tk.LEFT)
+        self.chart_var = tk.StringVar(value='equity')
+        chart_cb = ttk.Combobox(chart_ctrl, textvariable=self.chart_var,
+                                values=[n[1] for n in self.CHART_NAMES],
+                                width=20, state='readonly')
+        chart_cb.pack(side=tk.LEFT, padx=2)
+        chart_cb.bind('<<ComboboxSelected>>', self._on_chart_change)
+
+        self.chart_frame = ttk.Frame(chart_pane)
+        self.chart_frame.pack(fill=tk.BOTH, expand=1)
+        self.chart_canvas = None
+
+    def _analyze(self):
+        if self._on_analyze:
+            self._on_analyze()
+
+    def get_benchmark(self):
+        return self.bench_var.get()
+
+    def update_analytics(self, metrics, trades=None):
+        self._last_metrics = metrics
+        self._last_trades = trades
+
+        from analytics.performance import format_performance_report
+        report = format_performance_report(metrics)
+        self.report_text.configure(state='normal')
+        self.report_text.delete('1.0', tk.END)
+        self.report_text.insert(tk.END, report)
+        self.report_text.configure(state='disabled')
+
+        self.status_label.configure(
+            text=f"Trades: {metrics['total_trades']} | "
+                 f"WR: {metrics['win_rate']:.1f}% | "
+                 f"Sharpe: {metrics['sharpe']:.2f} | "
+                 f"DD: -{metrics['max_drawdown']:.1f}%"
+        )
+
+        self._show_chart('equity')
+
+    def _on_chart_change(self, event=None):
+        selected = self.chart_var.get()
+        key = None
+        for k, name in self.CHART_NAMES:
+            if name == selected:
+                key = k
+                break
+        if key:
+            self._show_chart(key)
+
+    def _show_chart(self, chart_key):
+        if self._last_metrics is None:
+            return
+
+        for w in self.chart_frame.winfo_children():
+            w.destroy()
+        self.chart_canvas = None
+
+        m = self._last_metrics
+
+        try:
+            import matplotlib
+            matplotlib.use('TkAgg')
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        except ImportError:
+            ttk.Label(self.chart_frame, text='matplotlib не установлен').pack(pady=20)
+            return
+
+        fig = None
+
+        if chart_key == 'equity':
+            from analytics.visualizations import plot_equity_drawdown
+            dates = self._get_dates()
+            fig = plot_equity_drawdown(m.get('equity_curve', []), m.get('drawdown_curve', []), dates=dates)
+
+        elif chart_key == 'pnl_dist':
+            if self._last_trades:
+                from analytics.visualizations import plot_pnl_distribution
+                pnls = [t['pnl'] for t in self._last_trades]
+                fig = plot_pnl_distribution(pnls)
+
+        elif chart_key == 'r_dist':
+            from analytics.visualizations import plot_r_distribution
+            r_vals = []
+            for t in (self._last_trades or []):
+                sl = t.get('sl_price', 0)
+                ep = t.get('entry_price', 0)
+                if sl and ep:
+                    risk = abs(ep - sl)
+                    if risk > 0:
+                        r_vals.append(t['pnl'] / (risk * t.get('qty', 1)))
+            fig = plot_r_distribution(r_vals)
+
+        elif chart_key == 'monthly':
+            from analytics.visualizations import plot_monthly_heatmap
+            fig = plot_monthly_heatmap(m.get('by_month', {}))
+
+        elif chart_key == 'rolling_wr':
+            from analytics.visualizations import plot_rolling_metric
+            wr = m.get('rolling_win_rate', [])
+            fig = plot_rolling_metric(wr, window_label='Win Rate %', title='Rolling Win Rate')
+
+        elif chart_key == 'rolling_pnl':
+            from analytics.visualizations import plot_rolling_metric
+            rp = m.get('rolling_pnl', [])
+            fig = plot_rolling_metric(rp, window_label='P&L (RUB)', title='Rolling P&L')
+
+        if fig is None:
+            ttk.Label(self.chart_frame, text='Нет данных для графика').pack(pady=20)
+            return
+
+        self.chart_canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
+        self.chart_canvas.draw()
+        self.chart_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+        toolbar = NavigationToolbar2Tk(self.chart_canvas, self.chart_frame)
+        toolbar.update()
+
+    def _get_dates(self):
+        if self._last_trades:
+            return [str(t.get('entry_date', ''))[:10] for t in self._last_trades]
+        return []
+
+
+class PairsTradingUI:
+    PAIR_COLS = ('rank', 'pair', 'corr', 'hedge', 'adf', 'p_val', 'hl', 'zscore')
+    PAIR_HEADERS = {
+        'rank': '#', 'pair': 'Пара', 'corr': 'Корр.', 'hedge': 'Hedge',
+        'adf': 'ADF', 'p_val': 'p-value', 'hl': 'HL(дн)', 'zscore': 'Z-score',
+    }
+    PAIR_WIDTHS = {
+        'rank': 30, 'pair': 120, 'corr': 55, 'hedge': 60,
+        'adf': 55, 'p_val': 55, 'hl': 55, 'zscore': 60,
+    }
+
+    TRADE_COLS = ('date', 'side', 'z_in', 'z_out', 'pnl', 'reason')
+    TRADE_HEADERS = {
+        'date': 'Дата', 'side': 'Направление', 'z_in': 'Z вх.',
+        'z_out': 'Z вых.', 'pnl': 'P&L', 'reason': 'Причина',
+    }
+    TRADE_WIDTHS = {
+        'date': 90, 'side': 100, 'z_in': 55, 'z_out': 55, 'pnl': 80, 'reason': 120,
+    }
+
+    def __init__(self, parent, on_scan=None, on_backtest=None):
+        self.parent = parent
+        self._on_scan = on_scan
+        self._on_backtest = on_backtest
+        self._pairs = []
+
+        main = ttk.Frame(parent)
+        main.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl = ttk.Frame(main)
+        ctrl.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Button(ctrl, text='Найти пары',
+                   command=self._scan).pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(ctrl, text='Тикеры (через запятую):').pack(side=tk.LEFT, padx=(10, 2))
+        self.tickers_entry = ttk.Entry(ctrl, width=40)
+        self.tickers_entry.pack(side=tk.LEFT, padx=2)
+        ToolTip(self.tickers_entry, 'Список тикеров для поиска пар.\nНапример: SBER, GAZP, LKOH, ROSN')
+
+        ttk.Button(ctrl, text='Бэктест пары',
+                   command=self._backtest).pack(side=tk.LEFT, padx=(15, 2))
+
+        self.status_label = ttk.Label(ctrl, text='', font=('', 9))
+        self.status_label.pack(side=tk.RIGHT, padx=5)
+
+        params_frame = ttk.LabelFrame(main, text='Параметры', padding=3)
+        params_frame.pack(fill=tk.X, pady=(0, 5))
+
+        row1 = ttk.Frame(params_frame)
+        row1.pack(fill=tk.X)
+
+        ttk.Label(row1, text='Z вход:').pack(side=tk.LEFT, padx=2)
+        self.entry_z = ttk.Entry(row1, width=5)
+        self.entry_z.insert(0, '2.0')
+        self.entry_z.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row1, text='Z выход:').pack(side=tk.LEFT, padx=2)
+        self.exit_z = ttk.Entry(row1, width=5)
+        self.exit_z.insert(0, '0.5')
+        self.exit_z.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row1, text='Z стоп:').pack(side=tk.LEFT, padx=2)
+        self.stop_z = ttk.Entry(row1, width=5)
+        self.stop_z.insert(0, '4.0')
+        self.stop_z.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row1, text='Макс. удержание:').pack(side=tk.LEFT, padx=2)
+        self.max_hold = ttk.Entry(row1, width=4)
+        self.max_hold.insert(0, '30')
+        self.max_hold.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row1, text='Lookback:').pack(side=tk.LEFT, padx=2)
+        self.lookback = ttk.Entry(row1, width=4)
+        self.lookback.insert(0, '60')
+        self.lookback.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row1, text='Макс. пар:').pack(side=tk.LEFT, padx=2)
+        self.max_pairs = ttk.Entry(row1, width=4)
+        self.max_pairs.insert(0, '20')
+        self.max_pairs.pack(side=tk.LEFT, padx=2)
+
+        paned = ttk.PanedWindow(main, orient=tk.VERTICAL)
+        paned.pack(fill=tk.BOTH, expand=1)
+
+        pairs_pane = ttk.Frame(paned)
+        paned.add(pairs_pane, weight=2)
+
+        result_pane = ttk.Frame(paned)
+        paned.add(result_pane, weight=1)
+
+        pair_tree_frame = ttk.Frame(pairs_pane)
+        pair_tree_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.pair_tree = ttk.Treeview(pair_tree_frame, columns=self.PAIR_COLS,
+                                       show='headings', height=10, selectmode='browse')
+        for col in self.PAIR_COLS:
+            self.pair_tree.heading(col, text=self.PAIR_HEADERS[col])
+            self.pair_tree.column(col, width=self.PAIR_WIDTHS[col], anchor='center')
+        scroll = ttk.Scrollbar(pair_tree_frame, orient='vertical',
+                                command=self.pair_tree.yview)
+        self.pair_tree.configure(yscrollcommand=scroll.set)
+        self.pair_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.pair_tree.tag_configure('coint', foreground='#008800')
+        self.pair_tree.tag_configure('weak', foreground='#888888')
+
+        self.result_text = tk.Text(result_pane, wrap=tk.WORD, font=('Consolas', 9),
+                                   height=10)
+        res_scroll = ttk.Scrollbar(result_pane, orient='vertical',
+                                    command=self.result_text.yview)
+        self.result_text.configure(yscrollcommand=res_scroll.set)
+        self.result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        res_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def _scan(self):
+        if self._on_scan:
+            self._on_scan()
+
+    def _backtest(self):
+        if self._on_backtest:
+            self._on_backtest()
+
+    def get_tickers(self):
+        text = self.tickers_entry.get().strip()
+        if not text:
+            return []
+        return [t.strip().upper() for t in text.split(',') if t.strip()]
+
+    def get_params(self):
+        try:
+            entry_z = float(self.entry_z.get().strip())
+        except (ValueError, TypeError):
+            entry_z = 2.0
+        try:
+            exit_z = float(self.exit_z.get().strip())
+        except (ValueError, TypeError):
+            exit_z = 0.5
+        try:
+            stop_z = float(self.stop_z.get().strip())
+        except (ValueError, TypeError):
+            stop_z = 4.0
+        try:
+            max_hold = int(self.max_hold.get().strip())
+        except (ValueError, TypeError):
+            max_hold = 30
+        try:
+            lookback = int(self.lookback.get().strip())
+        except (ValueError, TypeError):
+            lookback = 60
+        try:
+            max_pairs = int(self.max_pairs.get().strip())
+        except (ValueError, TypeError):
+            max_pairs = 20
+
+        return {
+            'entry_z': entry_z,
+            'exit_z': exit_z,
+            'stop_z': stop_z,
+            'max_hold': max_hold,
+            'lookback': lookback,
+            'max_pairs': max_pairs,
+        }
+
+    def get_selected_pair(self):
+        sel = self.pair_tree.selection()
+        if not sel:
+            return None
+        idx = self.pair_tree.index(sel[0])
+        if 0 <= idx < len(self._pairs):
+            return self._pairs[idx]
+        return None
+
+    def update_pairs(self, pairs):
+        self._pairs = pairs
+        for row in self.pair_tree.get_children():
+            self.pair_tree.delete(row)
+
+        for rank, p in enumerate(pairs, 1):
+            tag = 'coint' if p['p_value'] <= 0.05 else 'weak'
+            self.pair_tree.insert('', 'end', values=(
+                rank,
+                f"{p['ticker_y']}/{p['ticker_x']}",
+                f"{p['correlation']:.2f}",
+                f"{p['hedge_ratio']:.3f}",
+                f"{p['adf_stat']:.1f}",
+                f"{p['p_value']:.3f}",
+                f"{p['half_life']:.1f}",
+                f"{p['zscore_last']:+.2f}",
+            ), tags=(tag,))
+
+    def update_result(self, text):
+        self.result_text.configure(state='normal')
+        self.result_text.delete('1.0', tk.END)
+        self.result_text.insert(tk.END, text)
+        self.result_text.configure(state='disabled')
+
+    def set_status(self, text):
+        self.status_label.configure(text=text)

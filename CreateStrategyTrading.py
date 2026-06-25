@@ -80,7 +80,10 @@ class CreateStrategyApp:
         self._last_metrics = None
         self._last_export_stock = None
         self._favorites = load_favorites()
+        self._current_regime = None
         self.diary_storage = DiaryStorage()
+        from monitoring.notification_manager import NotificationManager
+        self.notification_manager = NotificationManager()
         migrate_ticker_settings(os.path.join('results', 'ticker_settings.json'))
         self.setup_ui()
         self._load_session_state()
@@ -88,6 +91,7 @@ class CreateStrategyApp:
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
         self.bind_events()
         self.root.after(1000, self._auto_check_positions)
+        self.root.after(3000, self._update_market_regime)
 
     def candles_to_df_custom(self, candles_list: list) -> pd.DataFrame | None:
         """Конвертация списка свечей в DataFrame"""
@@ -148,9 +152,22 @@ class CreateStrategyApp:
         top_bar = ttk.Frame(self.root)
         top_bar.pack(fill=tk.X, padx=5, pady=(5, 0))
         ttk.Label(top_bar, text="CreateStrategy", font=('', 12, 'bold')).pack(side=tk.LEFT)
+
+        self.regime_label = ttk.Label(top_bar, text="Рынок: ...", font=('', 10), cursor='hand2')
+        self.regime_label.pack(side=tk.LEFT, padx=20)
+        self.regime_label.bind('<Button-1>', self._on_regime_click)
+
+        self.breadth_label = ttk.Label(top_bar, text="Breadth: ...", font=('', 10), cursor='hand2')
+        self.breadth_label.pack(side=tk.LEFT, padx=5)
+        self.breadth_label.bind('<Button-1>', self._on_breadth_click)
+
         if HAS_SV_TTK:
             self._theme_btn = ttk.Button(top_bar, text='🌙 Тёмная', width=12, command=self._toggle_theme)
             self._theme_btn.pack(side=tk.RIGHT)
+
+        self._notif_btn = ttk.Button(top_bar, text='🔔 Уведомления', width=16,
+                                     command=self._show_notification_settings)
+        self._notif_btn.pack(side=tk.RIGHT, padx=5)
 
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=1)
@@ -159,11 +176,19 @@ class CreateStrategyApp:
         tab_scanner = ttk.Frame(notebook)
         tab_smart_scanner = ttk.Frame(notebook)
         tab_diary = ttk.Frame(notebook)
+        tab_positions = ttk.Frame(notebook)
+        tab_review = ttk.Frame(notebook)
+        tab_analytics = ttk.Frame(notebook)
+        tab_pairs = ttk.Frame(notebook)
         tab_app_guide = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
         notebook.add(tab_scanner, text='Сканер')
         notebook.add(tab_smart_scanner, text='Умный сканер')
         notebook.add(tab_diary, text='Дневник сделок')
+        notebook.add(tab_positions, text='Позиции')
+        notebook.add(tab_review, text='Обзор торговли')
+        notebook.add(tab_analytics, text='Аналитика')
+        notebook.add(tab_pairs, text='Пары')
         notebook.add(tab_app_guide, text='Описание')
 
         tab_guide = ttk.Frame(notebook)
@@ -189,6 +214,7 @@ class CreateStrategyApp:
             on_optimize=self.on_optimize,
             on_portfolio=self.on_portfolio,
             on_walkforward=self.on_walkforward,
+            on_sensitivity=self.on_sensitivity,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db
@@ -216,6 +242,34 @@ class CreateStrategyApp:
             tab_diary, storage=self.diary_storage,
             on_check_positions=self.on_check_positions,
             on_show_analysis=self.on_show_analysis
+        )
+
+        from visual import PositionDashboardUI
+        self.position_ui = PositionDashboardUI(
+            tab_positions,
+            on_refresh=self._on_position_refresh,
+            on_start_monitor=self._on_position_start,
+            on_stop_monitor=self._on_position_stop,
+        )
+        self.position_monitor = None
+
+        from visual import TradeReviewUI
+        self.review_ui = TradeReviewUI(
+            tab_review,
+            on_refresh=self._on_review_refresh,
+        )
+
+        from visual import PerformanceAnalyticsUI
+        self.perf_ui = PerformanceAnalyticsUI(
+            tab_analytics,
+            on_analyze=self._on_perf_analyze,
+        )
+
+        from visual import PairsTradingUI
+        self.pairs_ui = PairsTradingUI(
+            tab_pairs,
+            on_scan=self._on_pairs_scan,
+            on_backtest=self._on_pairs_backtest,
         )
 
         self.guide_ui = StrategyGuideUI(tab_guide)
@@ -487,6 +541,10 @@ class CreateStrategyApp:
         if self._theme_btn:
             self._theme_btn.config(text='☀️ Светлая' if self._current_theme == 'dark' else '🌙 Тёмная')
 
+    def _show_notification_settings(self):
+        from visual import NotificationSettingsUI
+        NotificationSettingsUI(self.root, self.notification_manager)
+
     def _apply_text_theme(self):
         is_dark = self._current_theme == 'dark'
         bg = self.DARK_TEXT_BG if is_dark else self.LIGHT_TEXT_BG
@@ -710,6 +768,7 @@ class CreateStrategyApp:
         self.app.backtest_button.config(state='normal', text='2. Backtest')
         self.app.display_backtest_results(metrics, params)
         self.app.enable_save_results_button()
+        self._last_trades = trades
         if params and 'capital' in params:
             self._last_capital = params['capital']
         if signal:
@@ -725,6 +784,9 @@ class CreateStrategyApp:
             engine_levels=engine_levels,
             sl_price=sl_price,
             tp_price=tp_price)
+
+        if metrics and metrics.get('max_drawdown', 0) > 0:
+            self.notification_manager.check_drawdown(metrics['max_drawdown'])
 
     def _on_backtest_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка backtest: {error_msg}")
@@ -937,6 +999,61 @@ class CreateStrategyApp:
         self.app.add_backtest_result(f"Ошибка Walk-forward: {error_msg}")
         self.app.walkforward_button.config(state='normal', text='5. Walk-fwd')
 
+    def on_sensitivity(self) -> None:
+        if self.state.stock_data is None or not isinstance(self.state.stock_data, list):
+            self.app.add_backtest_result("Ошибка: сначала загрузите данные (кнопка 1)")
+            return
+        if len(self.state.stock_data) < MIN_CANDLES_FOR_BACKTEST:
+            self.app.add_backtest_result("Ошибка: слишком мало данных (нужно >= 30 свечей)")
+            return
+
+        params = self.app.get_backtest_params()
+        if params is None:
+            return
+
+        strategy_id = params.get('strategy', 'breakout')
+        self.app.sensitivity_button.config(state='disabled', text='Анализ...')
+        self.app.add_backtest_result("Анализ чувствительности... подождите")
+
+        def run():
+            from optimization.sensitivity import analyze_sensitivity, format_sensitivity_report, plot_tornado
+            try:
+                result = analyze_sensitivity(
+                    strategy_id=strategy_id,
+                    candles=self.state.stock_data,
+                    base_params=params,
+                )
+                report = format_sensitivity_report(result)
+                self.root.after(0, lambda: self._on_sensitivity_complete(report, result))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_sensitivity_error(str(e)))
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_sensitivity_complete(self, report, result):
+        self.app.sensitivity_button.config(state='normal', text='6. Чувств.')
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+        txt.insert(tk.END, report)
+
+        try:
+            from optimization.sensitivity import plot_tornado
+            fig = plot_tornado(result)
+            if fig is not None:
+                try:
+                    import matplotlib
+                    matplotlib.use('TkAgg')
+                    fig.show()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _on_sensitivity_error(self, error_msg):
+        self.app.add_backtest_result(f"Ошибка анализа чувствительности: {error_msg}")
+        self.app.sensitivity_button.config(state='normal', text='6. Чувств.')
+
     def on_portfolio(self) -> None:
         """Портфельный бэктест по тикерам из торгового дневника."""
         entries = self.diary_storage.load()
@@ -955,6 +1072,11 @@ class CreateStrategyApp:
             return
         strategy_id = params.pop('strategy', 'bounce')
 
+        risk_params = self.app.get_portfolio_risk_params()
+        if risk_params is None:
+            self.app.add_backtest_result("Ошибка: проверьте параметры лимитов портфеля.")
+            return
+
         start_date = self.app.start_date_entry.get()
         end_date = self.app.end_date_entry.get()
 
@@ -963,6 +1085,8 @@ class CreateStrategyApp:
         txt.delete(1.0, tk.END)
         txt.insert(tk.END, f"Загрузка данных для {len(tickers)} тикеров из дневника: {', '.join(tickers)}\n")
         self.root.update_idletasks()
+
+        sector_map = self.sector_db.get_ticker_to_sector_map()
 
         def fetch_and_run():
             try:
@@ -982,7 +1106,18 @@ class CreateStrategyApp:
                     return
 
                 from backtest.portfolio import run_portfolio
-                result = run_portfolio(portfolio_data, capital=params.get('capital', 1_000_000), **params)
+                from backtest.portfolio_risk import PortfolioRiskManager
+
+                risk_manager = PortfolioRiskManager(
+                    max_open_positions=risk_params['max_open_positions'],
+                    max_drawdown_pct=risk_params['max_drawdown_pct'],
+                    cooldown_bars=risk_params['cooldown_bars'],
+                    max_sector_exposure=risk_params['max_sector_exposure'],
+                    sector_map=sector_map,
+                )
+
+                result = run_portfolio(portfolio_data, capital=params.get('capital', 1_000_000),
+                                       risk_manager=risk_manager, **params)
 
                 self.root.after(0, lambda: self._on_portfolio_complete(result, strategy_id, errors))
             except Exception as e:
@@ -1015,9 +1150,25 @@ class CreateStrategyApp:
             f"Profit Factor:      {pm['profit_factor']}",
             f"Max Drawdown:       -{pm['max_drawdown']:.2f} %",
             f"Sharpe Ratio:       {pm['sharpe']}",
-            "",
-            "── По тикерам ──",
         ]
+
+        risk_stats = result.get('risk_stats')
+        if risk_stats:
+            lines.append("")
+            lines.append("── Лимиты портфеля ──")
+            if risk_stats.get('blocked_positions', 0) > 0:
+                lines.append(f"  Заблокировано по лимиту позиций: {risk_stats['blocked_positions']}")
+            if risk_stats.get('blocked_drawdown', 0) > 0:
+                lines.append(f"  Заблокировано по стоп-просадке: {risk_stats['blocked_drawdown']}")
+            if risk_stats.get('blocked_sector', 0) > 0:
+                lines.append(f"  Заблокировано по сектору: {risk_stats['blocked_sector']}")
+            if risk_stats.get('drawdown_halts', 0) > 0:
+                lines.append(f"  Срабатываний портфельного стопа: {risk_stats['drawdown_halts']}")
+            if not any(v > 0 for k, v in risk_stats.items() if k != 'drawdown_halts'):
+                lines.append("  Лимиты не сработали (нет блокировок)")
+
+        lines.append("")
+        lines.append("── По тикерам ──")
         for ticker, tr in sorted(result['ticker_results'].items()):
             m = tr['metrics']
             lines.append(
@@ -1353,6 +1504,8 @@ class CreateStrategyApp:
         self.diary_storage.add_entries([entry])
         if self.diary_ui:
             self.diary_ui.refresh()
+        self.notification_manager.on_position_opened(
+            ticker, entry.side, entry_price)
         mb.showinfo('В дневник', f'{ticker} добавлен в дневник.')
 
     def on_show_ticker_settings(self) -> None:
@@ -1484,6 +1637,226 @@ class CreateStrategyApp:
         t = threading.Thread(target=task, daemon=True)
         t.start()
 
+    def _update_market_regime(self):
+        from market.regime import MarketRegimeDetector, REGIME_CRISIS, REGIME_TRENDING_UP, REGIME_TRENDING_DOWN, REGIME_RANGING
+        detector = MarketRegimeDetector()
+
+        def on_regime(result):
+            regime = result.get('regime', REGIME_RANGING)
+            label = result.get('label', 'Флэт')
+            confidence = result.get('confidence', 0)
+
+            color_map = {
+                REGIME_TRENDING_UP: '#00aa00',
+                REGIME_TRENDING_DOWN: '#cc0000',
+                REGIME_RANGING: '#888888',
+                REGIME_CRISIS: '#ff0000',
+            }
+            color = color_map.get(regime, '#888888')
+
+            try:
+                self.regime_label.config(text=f"Рынок: {label} ({confidence:.0%})", foreground=color)
+            except Exception:
+                pass
+
+            self._current_regime = result
+
+            self.notification_manager.check_regime_change(regime)
+
+            self._update_breadth()
+
+        detector.detect_async(on_regime)
+
+    def _update_breadth(self):
+        tickers = self.sector_db.get_all_tickers()
+        if not tickers:
+            try:
+                self.breadth_label.config(text="Breadth: —")
+            except Exception:
+                pass
+            self._schedule_regime_update()
+            return
+
+        sample = tickers[:50]
+
+        def task():
+            from datetime import datetime, timedelta
+            from market.breadth import BreadthIndicator
+
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
+
+            ticker_closes = {}
+            for ticker in sample:
+                try:
+                    candles = self.get_stock_data(ticker, start_date, end_date)
+                    if isinstance(candles, list) and len(candles) > 50:
+                        closes = [float(c[1]) for c in candles if c and len(c) >= 2]
+                        if len(closes) > 50:
+                            ticker_closes[ticker] = closes
+                except Exception:
+                    continue
+
+            indicator = BreadthIndicator(ma_period=50)
+            result = indicator.calculate(ticker_closes)
+            return result
+
+        def on_done(result):
+            self._last_breadth = result
+            try:
+                if result:
+                    pct = result['above_pct']
+                    zone = result['zone']
+                    zone_labels = {
+                        'overbought': 'перекупл.',
+                        'oversold': 'перепрод.',
+                        'neutral': 'нейтр.',
+                    }
+                    zone_text = zone_labels.get(zone, zone)
+                    color_map = {
+                        'overbought': '#cc6600',
+                        'oversold': '#0088ff',
+                        'neutral': '#888888',
+                    }
+                    color = color_map.get(zone, '#888888')
+                    self.breadth_label.config(
+                        text=f"Breadth: {pct:.0f}% ({zone_text}, {result['above_count']}/{result['total_count']})",
+                        foreground=color)
+                else:
+                    self.breadth_label.config(text="Breadth: —")
+            except Exception:
+                pass
+
+            self._schedule_regime_update()
+
+        import threading
+        def run():
+            r = task()
+            try:
+                self.root.after(0, on_done, r)
+            except Exception:
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_regime_click(self, event=None):
+        regime = getattr(self, '_current_regime', None)
+        if not regime:
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title('Детали рыночного режима')
+        win.geometry('550x500')
+        win.resizable(True, True)
+
+        main = ttk.Frame(win, padding=10)
+        main.pack(fill=tk.BOTH, expand=1)
+
+        label = regime.get('label', '—')
+        confidence = regime.get('confidence', 0)
+        details = regime.get('details', {})
+        recommended = regime.get('recommended_strategies', [])
+
+        info_text = f"Регим: {label} (уверенность {confidence:.0%})\n\n"
+        if details:
+            info_text += "Показатели IMOEX:\n"
+            labels_map = {
+                'adx': 'ADX',
+                'plus_di': '+DI',
+                'minus_di': '-DI',
+                'ma': 'SMA(50)',
+                'close': 'Цена',
+                'recent_return': 'Доходность 20д (%)',
+                'atr_ratio': 'ATR ratio',
+            }
+            for key, val in details.items():
+                lbl = labels_map.get(key, key)
+                info_text += f"  {lbl}: {val}\n"
+
+        if recommended:
+            info_text += f"\nРекомендуемые стратегии: {', '.join(recommended)}"
+
+        text = tk.Text(main, wrap='word', font=('Consolas', 10), padx=10, pady=10)
+        scroll = ttk.Scrollbar(main, orient='vertical', command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
+        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        text.insert('1.0', info_text)
+        text.configure(state='disabled')
+
+    def _on_breadth_click(self, event=None):
+        breadth = getattr(self, '_last_breadth', None)
+        if not breadth:
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title('Детали Breadth')
+        win.geometry('600x550')
+        win.resizable(True, True)
+
+        main = ttk.Frame(win, padding=10)
+        main.pack(fill=tk.BOTH, expand=1)
+
+        pct = breadth['above_pct']
+        total = breadth['total_count']
+        above = breadth['above_count']
+        zone = breadth['zone']
+        zone_labels = {'overbought': 'Перекупленность', 'oversold': 'Перепроданность', 'neutral': 'Нейтрально'}
+
+        header = ttk.Label(main, text=f"Выше MA(50): {above}/{total} ({pct:.1f}%) — {zone_labels.get(zone, zone)}",
+                           font=('', 11, 'bold'))
+        header.pack(anchor='w', pady=(0, 5))
+
+        nb = ttk.Notebook(main)
+        nb.pack(fill=tk.BOTH, expand=1)
+
+        above_frame = ttk.Frame(nb)
+        below_frame = ttk.Frame(nb)
+        nb.add(above_frame, text=f'Выше MA ({above})')
+        nb.add(below_frame, text=f'Ниже MA ({total - above})')
+
+        cols = ('ticker', 'close', 'ma', 'dist')
+        headers = {'ticker': 'Тикер', 'close': 'Цена', 'ma': 'MA(50)', 'dist': 'От MA %'}
+        widths = {'ticker': 80, 'close': 90, 'ma': 90, 'dist': 80}
+
+        above_tree = ttk.Treeview(above_frame, columns=cols, show='headings', height=20)
+        for col in cols:
+            above_tree.heading(col, text=headers[col])
+            above_tree.column(col, width=widths[col], anchor='center')
+        above_scroll = ttk.Scrollbar(above_frame, orient='vertical', command=above_tree.yview)
+        above_tree.configure(yscrollcommand=above_scroll.set)
+        above_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        above_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        above_tree.tag_configure('positive', foreground='#00aa00')
+
+        for item in breadth.get('above_items', []):
+            dist = (item['close'] - item['ma']) / item['ma'] * 100 if item['ma'] else 0
+            above_tree.insert('', 'end', values=(
+                item['ticker'], f"{item['close']:.2f}", f"{item['ma']:.2f}", f"+{dist:.1f}%"
+            ), tags=('positive',))
+
+        below_tree = ttk.Treeview(below_frame, columns=cols, show='headings', height=20)
+        for col in cols:
+            below_tree.heading(col, text=headers[col])
+            below_tree.column(col, width=widths[col], anchor='center')
+        below_scroll = ttk.Scrollbar(below_frame, orient='vertical', command=below_tree.yview)
+        below_tree.configure(yscrollcommand=below_scroll.set)
+        below_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        below_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        below_tree.tag_configure('negative', foreground='#cc0000')
+
+        for item in breadth.get('below_items', []):
+            dist = (item['ma'] - item['close']) / item['ma'] * 100 if item['ma'] else 0
+            below_tree.insert('', 'end', values=(
+                item['ticker'], f"{item['close']:.2f}", f"{item['ma']:.2f}", f"-{dist:.1f}%"
+            ), tags=('negative',))
+
+    def _schedule_regime_update(self):
+        try:
+            self.root.after(1800000, self._update_market_regime)
+        except Exception:
+            pass
+
     def _on_check_positions_done(self, updated):
         self.diary_ui.refresh()
         import tkinter.messagebox as mb
@@ -1493,6 +1866,251 @@ class CreateStrategyApp:
         else:
             mb.showinfo('Проверка позиций',
                         'Открытые позиции без изменений.')
+
+    def _on_position_refresh(self):
+        if self.position_monitor is None:
+            from monitoring.position_monitor import PositionMonitor
+            self.position_monitor = PositionMonitor(
+                self.root, self.diary_storage, self.get_stock_data,
+                on_alerts=self._on_position_alerts,
+                on_refresh=self._on_position_data,
+            )
+        self.position_monitor.near_distance_pct = self.position_ui.get_near_distance_pct()
+        self.position_monitor.check_once()
+
+    def _on_position_start(self):
+        if self.position_monitor is None:
+            from monitoring.position_monitor import PositionMonitor
+            self.position_monitor = PositionMonitor(
+                self.root, self.diary_storage, self.get_stock_data,
+                on_alerts=self._on_position_alerts,
+                on_refresh=self._on_position_data,
+            )
+        self.position_monitor.set_interval(self.position_ui.get_interval_sec())
+        self.position_monitor.near_distance_pct = self.position_ui.get_near_distance_pct()
+        self.position_monitor.start()
+        self.position_ui.set_monitor_running(True)
+
+    def _on_position_stop(self):
+        if self.position_monitor:
+            self.position_monitor.stop()
+        self.position_ui.set_monitor_running(False)
+
+    def _on_position_alerts(self, alerts):
+        self.position_ui.update_alerts(alerts)
+        self.notification_manager.check_alerts(alerts)
+
+    def _on_position_data(self, positions):
+        self.position_ui.update_positions(positions)
+        if self.diary_ui:
+            self.diary_ui.refresh()
+
+    def _on_review_refresh(self):
+        entries = self.diary_storage.load()
+        if not entries:
+            import tkinter.messagebox as mb
+            mb.showwarning('Обзор', 'Дневник пуст. Добавьте сделки.')
+            return
+        closed = [e for e in entries if e.status == 'closed' and e.pnl is not None]
+        if not closed:
+            import tkinter.messagebox as mb
+            mb.showwarning('Обзор', 'Нет закрытых сделок для анализа.')
+            return
+        from diary.trade_review import compute_review
+        capital = self.review_ui.get_capital()
+        result = compute_review(entries, capital=capital)
+        self.review_ui.update_review(result)
+
+    def _on_perf_analyze(self):
+        if self._last_trades is None or not self._last_trades:
+            entries = self.diary_storage.load()
+            if not entries:
+                import tkinter.messagebox as mb
+                mb.showwarning('Аналитика', 'Нет данных. Запустите backtest или добавьте сделки в дневник.')
+                return
+            closed = [e for e in entries if e.status == 'closed' and e.pnl is not None]
+            if not closed:
+                import tkinter.messagebox as mb
+                mb.showwarning('Аналитика', 'Нет закрытых сделок.')
+                return
+            from diary.journal import asdict
+            trades = [asdict(e) for e in closed]
+            for t in trades:
+                t['pnl_pct'] = (t['pnl'] / t.get('entry_price', 1)) * 100 if t.get('entry_price') else 0
+                t['exit_reason'] = t.get('exit_reason', 'Вручную')
+                t['sl_price'] = t.get('sl_price', 0)
+                t['entry_price'] = t.get('entry_price', 0)
+                t['qty'] = t.get('qty', 1)
+            capital = self._last_capital
+        else:
+            trades = self._last_trades
+            capital = self._last_capital
+
+        benchmark_returns = None
+        bench = self.perf_ui.get_benchmark()
+        if bench == 'IMOEX':
+            try:
+                from market.regime import load_imoex_candles, candles_to_df
+                candles = load_imoex_candles()
+                if candles:
+                    df = candles_to_df(candles)
+                    if df is not None and len(df) > 10:
+                        closes = df['Close'].astype(float)
+                        benchmark_returns = closes.pct_change().dropna().tolist()
+            except Exception:
+                pass
+
+        from analytics.performance import calc_advanced_metrics
+        metrics = calc_advanced_metrics(trades, initial_capital=capital,
+                                        benchmark_returns=benchmark_returns)
+        self.perf_ui.update_analytics(metrics, trades=trades)
+
+    def _on_pairs_scan(self):
+        tickers = self.pairs_ui.get_tickers()
+        if len(tickers) < 2:
+            import tkinter.messagebox as mb
+            mb.showwarning('Пары', 'Укажите минимум 2 тикера через запятую.')
+            return
+
+        self.pairs_ui.set_status('Загрузка данных...')
+        params = self.pairs_ui.get_params()
+
+        def run():
+            price_data = {}
+            from datetime import datetime, timedelta
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+
+            for ticker in tickers:
+                candles = self.get_stock_data(ticker, start_date, end_date)
+                if isinstance(candles, list) and len(candles) > 30:
+                    closes = []
+                    for c in candles:
+                        if c is not None and len(c) >= 2:
+                            closes.append(float(c[1]))
+                    if len(closes) > 30:
+                        price_data[ticker] = closes
+
+            if len(price_data) < 2:
+                self.root.after(0, lambda: self.pairs_ui.set_status(
+                    'Недостаточно данных. Проверьте тикеры.'))
+                return
+
+            self.root.after(0, lambda: self.pairs_ui.set_status(
+                f'Анализ {len(price_data)} тикеров...'))
+
+            from pairs.cointegration import find_cointegrated_pairs, format_pairs_report
+            pairs = find_cointegrated_pairs(
+                price_data,
+                max_pairs=params['max_pairs'],
+            )
+
+            report = format_pairs_report(pairs)
+
+            self.root.after(0, lambda: self._on_pairs_scan_complete(pairs, report))
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_pairs_scan_complete(self, pairs, report):
+        self.pairs_ui.update_pairs(pairs)
+        self.pairs_ui.update_result(report)
+        self.pairs_ui.set_status(f'Найдено пар: {len(pairs)}')
+
+    def _on_pairs_backtest(self):
+        pair = self.pairs_ui.get_selected_pair()
+        if not pair:
+            import tkinter.messagebox as mb
+            mb.showwarning('Пары', 'Выберите пару из таблицы.')
+            return
+
+        params = self.pairs_ui.get_params()
+        ticker_y = pair['ticker_y']
+        ticker_x = pair['ticker_x']
+
+        self.pairs_ui.set_status(f'Загрузка {ticker_y}, {ticker_x}...')
+
+        def run():
+            from datetime import datetime, timedelta
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+
+            candles_y = self.get_stock_data(ticker_y, start_date, end_date)
+            candles_x = self.get_stock_data(ticker_x, start_date, end_date)
+
+            if not isinstance(candles_y, list) or not isinstance(candles_x, list):
+                self.root.after(0, lambda: self.pairs_ui.set_status('Ошибка загрузки данных'))
+                return
+
+            closes_y = [float(c[1]) for c in candles_y if c and len(c) >= 2]
+            closes_x = [float(c[1]) for c in candles_x if c and len(c) >= 2]
+            dates_y = [str(c[6])[:10] for c in candles_y if c and len(c) > 6]
+
+            min_len = min(len(closes_y), len(closes_x), len(dates_y))
+            if min_len < params['lookback'] + 10:
+                self.root.after(0, lambda: self.pairs_ui.set_status('Слишком мало данных'))
+                return
+
+            closes_y = closes_y[-min_len:]
+            closes_x = closes_x[-min_len:]
+            dates = dates_y[-min_len:]
+
+            from pairs.strategy import run_pairs_backtest, format_pairs_backtest_report
+            result = run_pairs_backtest(
+                price_y=closes_y,
+                price_x=closes_x,
+                dates=dates,
+                hedge_ratio=pair['hedge_ratio'],
+                capital=self._last_capital,
+                entry_z=params['entry_z'],
+                exit_z=params['exit_z'],
+                stop_z=params['stop_z'],
+                max_hold=params['max_hold'],
+                lookback=params['lookback'],
+            )
+
+            report = format_pairs_backtest_report(result, ticker_y, ticker_x)
+
+            self.root.after(0, lambda: self._on_pairs_bt_complete(report, result, pair))
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_pairs_bt_complete(self, report, result, pair):
+        self.pairs_ui.update_result(report)
+        self.pairs_ui.set_status(
+            f"{pair['ticker_y']}/{pair['ticker_x']}: "
+            f"{result['total_trades']} сделок, "
+            f"P&L={result['total_pnl']:+,.0f}")
+
+        try:
+            import matplotlib
+            matplotlib.use('TkAgg')
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+            if result.get('trades') and pair.get('spread'):
+                spread = pair['spread']
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 4))
+
+                ax1.plot(spread, linewidth=0.8, color='#2196F3')
+                mu = pair['spread_mean']
+                sigma = pair['spread_std']
+                ax1.axhline(y=mu, color='gray', linestyle='--', linewidth=0.5)
+                ax1.axhline(y=mu + 2 * sigma, color='red', linestyle=':', linewidth=0.5)
+                ax1.axhline(y=mu - 2 * sigma, color='red', linestyle=':', linewidth=0.5)
+                ax1.set_title(f"Спред {pair['ticker_y']}/{pair['ticker_x']}")
+                ax1.set_ylabel('Спред')
+
+                if result.get('equity_curve'):
+                    ax2.plot(result['equity_curve'], linewidth=1, color='#44aa44')
+                    ax2.set_title('Equity парной стратегии')
+                    ax2.set_ylabel('Капитал')
+
+                fig.tight_layout()
+                plt.show()
+        except Exception:
+            pass
 
     def on_show_analysis(self) -> None:
         """Показать окно анализа сделок с equity curve"""

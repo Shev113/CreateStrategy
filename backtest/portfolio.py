@@ -5,14 +5,16 @@ from collections import defaultdict
 from datetime import datetime
 
 from .engine import BacktestEngine, candles_to_df
+from .portfolio_risk import PortfolioRiskManager
 
 
-def run_portfolio(portfolio_data, capital=1_000_000, **engine_kwargs):
+def run_portfolio(portfolio_data, capital=1_000_000, risk_manager=None, **engine_kwargs):
     """Run backtest on multiple tickers with shared capital pool.
 
     Args:
         portfolio_data: dict of {ticker: candles_list}
         capital: total capital pool shared across all tickers
+        risk_manager: PortfolioRiskManager instance (or None for unlimited)
         **engine_kwargs: kwargs passed to each BacktestEngine
 
     Returns:
@@ -21,6 +23,9 @@ def run_portfolio(portfolio_data, capital=1_000_000, **engine_kwargs):
     n = len(portfolio_data)
     if n == 0:
         return {'trades': [], 'portfolio_metrics': _empty_metrics(capital), 'ticker_results': {}}
+
+    if risk_manager and risk_manager.enabled:
+        return _run_portfolio_risk(portfolio_data, capital, risk_manager, **engine_kwargs)
 
     alloc = capital / n
     all_trades = []
@@ -47,6 +52,143 @@ def run_portfolio(portfolio_data, capital=1_000_000, **engine_kwargs):
         'trades': all_trades,
         'portfolio_metrics': portfolio_metrics,
         'ticker_results': ticker_results,
+        'risk_stats': None,
+    }
+
+
+def _run_portfolio_risk(portfolio_data, capital, risk_manager, **engine_kwargs):
+    """Portfolio backtest with risk constraints.
+
+    Runs independent backtests per ticker to generate candidate trades,
+    then filters them through a unified time simulation that enforces:
+    - max simultaneous positions
+    - portfolio drawdown stop with cooldown
+    - sector exposure limits
+    """
+    n = len(portfolio_data)
+    max_pos = risk_manager.max_open_positions if risk_manager.max_open_positions > 0 else n
+    alloc = capital / max_pos
+
+    raw_trades_by_ticker = {}
+    ticker_results = {}
+
+    for ticker, candles in portfolio_data.items():
+        engine = BacktestEngine(capital=alloc, **engine_kwargs)
+        trades, metrics = engine.run(candles)
+        for t in trades:
+            t['ticker'] = ticker
+        raw_trades_by_ticker[ticker] = sorted(
+            trades, key=lambda t: (str(t.get('entry_date', '')), str(t.get('exit_date', '')))
+        )
+        ticker_results[ticker] = {
+            'trades': [],
+            'metrics': _empty_metrics(alloc),
+            'total_return': 0,
+            'total_trades': 0,
+        }
+
+    all_raw = []
+    for ticker, trades in raw_trades_by_ticker.items():
+        for t in trades:
+            all_raw.append(t)
+
+    if not all_raw:
+        return {
+            'trades': [],
+            'portfolio_metrics': _empty_metrics(capital),
+            'ticker_results': ticker_results,
+            'risk_stats': risk_manager.stats,
+        }
+
+    all_raw.sort(key=lambda t: (str(t.get('entry_date', '')), str(t.get('exit_date', ''))))
+
+    all_entry_dates = set()
+    all_exit_dates = set()
+    for t in all_raw:
+        ed = t.get('entry_date')
+        xd = t.get('exit_date')
+        if ed is not None:
+            all_entry_dates.add(str(ed))
+        if xd is not None:
+            all_exit_dates.add(str(xd))
+
+    sorted_dates = sorted(all_entry_dates | all_exit_dates)
+
+    open_positions = []
+    approved_trades = []
+    equity = capital
+    peak_equity = capital
+    bar_index = 0
+
+    trade_iter = iter(all_raw)
+    next_trade = next(trade_iter, None)
+
+    for date_str in sorted_dates:
+        closed_this_step = []
+        remaining = []
+        for pos in open_positions:
+            exit_date_str = str(pos.get('exit_date', ''))
+            if exit_date_str <= date_str:
+                pnl = pos.get('pnl', 0)
+                equity += pnl
+                closed_this_step.append(pos)
+                approved_trades.append(pos)
+            else:
+                remaining.append(pos)
+        open_positions = remaining
+
+        if equity > peak_equity:
+            peak_equity = equity
+
+        while next_trade is not None and str(next_trade.get('entry_date', '')) <= date_str:
+            trade = next_trade
+            next_trade = next(trade_iter, None)
+
+            ticker = trade.get('ticker', '')
+            position_values = {}
+            for op in open_positions:
+                op_ticker = op.get('ticker', '')
+                op_val = abs(op.get('entry_price', 0) * op.get('qty', 0))
+                position_values[op_ticker] = position_values.get(op_ticker, 0) + op_val
+
+            allowed, reason = risk_manager.can_open(
+                ticker, open_positions, equity, peak_equity, bar_index, position_values
+            )
+
+            if allowed:
+                open_positions.append(trade)
+            bar_index += 1
+
+    for pos in open_positions:
+        approved_trades.append(pos)
+        equity += pos.get('pnl', 0)
+
+    if equity > peak_equity:
+        peak_equity = equity
+
+    for trade in approved_trades:
+        ticker = trade.get('ticker', '')
+        if ticker in ticker_results:
+            ticker_results[ticker]['trades'].append(trade)
+
+    for ticker, tr in ticker_results.items():
+        trades = tr['trades']
+        if trades:
+            t_capital = alloc
+            t_final = t_capital + sum(t.get('pnl', 0) for t in trades)
+            tr['metrics'] = _calc_portfolio_metrics(trades, t_capital, t_final)
+            tr['total_return'] = tr['metrics'].get('total_return', 0)
+            tr['total_trades'] = len(trades)
+        else:
+            tr['metrics'] = _empty_metrics(alloc)
+
+    portfolio_metrics = _calc_portfolio_metrics(approved_trades, capital, equity)
+
+    return {
+        'trades': approved_trades,
+        'portfolio_metrics': portfolio_metrics,
+        'ticker_results': ticker_results,
+        'risk_stats': risk_manager.stats,
     }
 
 
