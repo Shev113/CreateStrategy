@@ -22,6 +22,10 @@ TASK_DEFAULTS = {
         'enabled': False,
         'interval_min': 10,
     },
+    'auto_news_scan': {
+        'enabled': False,
+        'interval_min': 15,
+    },
 }
 
 

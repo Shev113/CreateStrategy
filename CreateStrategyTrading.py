@@ -233,6 +233,7 @@ class CreateStrategyApp:
         tab_calc = ttk.Frame(notebook)
         tab_signals = ttk.Frame(notebook)
         tab_alerts = ttk.Frame(notebook)
+        tab_news = ttk.Frame(notebook)
         tab_app_guide = ttk.Frame(notebook)
         tab_automation = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
@@ -248,6 +249,7 @@ class CreateStrategyApp:
         notebook.add(tab_calc, text='Калькулятор')
         notebook.add(tab_signals, text='Сигналы')
         notebook.add(tab_alerts, text='Алерты')
+        notebook.add(tab_news, text='AI Новости')
         notebook.add(tab_automation, text='Автоматизация')
         notebook.add(tab_app_guide, text='Описание')
 
@@ -396,10 +398,22 @@ class CreateStrategyApp:
             all_tickers=_all_tickers,
         )
 
+        from news.analyzer import NewsAnalyzer
+        from news.ui import NewsUI
+        self.news_analyzer = NewsAnalyzer(known_tickers=_all_tickers)
+        self.news_ui = NewsUI(
+            tab_news,
+            on_refresh=self._on_news_refresh,
+            on_analyze=self._on_news_analyze,
+            on_settings=self._on_news_settings,
+            all_tickers=_all_tickers,
+        )
+
         self.scheduler = AutomationScheduler(self.root)
         self.scheduler.register_task('auto_scan', self._auto_scan_callback)
         self.scheduler.register_task('monitor_positions', self._auto_monitor_callback)
         self.scheduler.register_task('refresh_watchlist', self._auto_watchlist_callback)
+        self.scheduler.register_task('auto_news_scan', self._auto_news_callback)
         self.automation_panel = AutomationPanel(
             tab_automation, self.scheduler,
             on_start_all=self._on_automation_start_all,
@@ -2334,6 +2348,58 @@ class CreateStrategyApp:
 
     def _on_alert_refresh(self, alerts):
         self.alert_ui.refresh(alerts)
+
+    def _on_news_refresh(self):
+        self.news_ui.status_label.configure(text='Загрузка новостей...')
+        cached = self.news_analyzer.get_cached()
+        if cached:
+            self.news_ui.update_news(cached)
+        else:
+            self._on_news_analyze()
+
+    def _on_news_analyze(self):
+        self.news_ui.status_label.configure(text='Анализ новостей...')
+
+        def run():
+            config = __import__('news.provider', fromlist=['load_ai_config']).load_ai_config()
+            max_news = config.get('max_news', 50)
+            results = self.news_analyzer.fetch_and_analyze(count=max_news)
+
+            def show():
+                self.news_ui.update_news(results)
+                self.news_ui.status_label.configure(
+                    text=f'{len(results)} новостей проанализировано')
+            self.root.after(0, show)
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_news_settings(self):
+        self.news_ui._show_settings()
+        self.news_analyzer._rebuild_provider()
+
+    def _auto_news_callback(self):
+        config = __import__('news.provider', fromlist=['load_ai_config']).load_ai_config()
+        max_news = config.get('max_news', 50)
+        results = self.news_analyzer.fetch_and_analyze(count=max_news)
+        positive = [r for r in results if r.get('sentiment') == 'positive']
+        negative = [r for r in results if r.get('sentiment') == 'negative']
+        high_impact = [r for r in results if r.get('impact', 0) >= 3]
+        for r in high_impact:
+            tickers = r.get('tickers', [])
+            if isinstance(tickers, list):
+                for t in tickers:
+                    self.notification_manager.notify(
+                        'news_alert',
+                        f'AI: {t} {r.get("sentiment", "")}',
+                        r.get('summary', '')[:200],
+                        icon='info',
+                    )
+        try:
+            self.root.after(0, lambda: self.news_ui.update_news(results))
+        except Exception:
+            pass
+        return f'{len(results)} новостей, +{len(positive)}/-{len(negative)}, {len(high_impact)} сильных'
 
     def _on_review_refresh(self):
         entries = self.diary_storage.load()
