@@ -36,7 +36,8 @@ from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_posi
 from intraday.visual import IntradayUI
 from automation.scheduler import AutomationScheduler
 from automation.panel import AutomationPanel
-from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir
+from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir, tree_batch_insert
+from core.moex_cache import moex_cache, cached_get_tickers, cached_get_candles
 
 # Настройка логирования
 logging.basicConfig(
@@ -153,7 +154,12 @@ class CreateStrategyApp:
         )
 
     def get_stock_data(self, symbol: str, start_date: str, end_date: str) -> list | str:
-        """Получение исторических данных по акции"""
+        """Получение исторических данных по акции (с кэшем)"""
+        return cached_get_candles(symbol, start_date, end_date,
+                                   lambda: self._fetch_stock_data(symbol, start_date, end_date))
+
+    def _fetch_stock_data(self, symbol: str, start_date: str, end_date: str) -> list | str:
+        """Получение исторических данных по акции (сырой HTTP-запрос)"""
         try:
             url = f"https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/{symbol}/candles.json"
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -758,12 +764,21 @@ class CreateStrategyApp:
         except Exception:
             pass
         try:
+            moex_cache.cleanup()
+            moex_cache.flush()
+        except Exception:
+            pass
+        try:
             self.root.destroy()
         except tk.TclError:
             pass
 
     def get_moex_tickers(self) -> list[str]:
-        """Получение списка тикеров MOEX"""
+        """Получение списка тикеров MOEX (с кэшем)"""
+        return cached_get_tickers(self._fetch_moex_tickers)
+
+    def _fetch_moex_tickers(self) -> list[str]:
+        """Получение списка тикеров MOEX (сырой HTTP-запрос)"""
         try:
             url = "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json"
             response = requests.get(url, timeout=30, verify=False)
@@ -2091,11 +2106,14 @@ class CreateStrategyApp:
         above_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         above_tree.tag_configure('positive', foreground='#00aa00')
 
+        above_items = []
         for item in breadth.get('above_items', []):
             dist = (item['close'] - item['ma']) / item['ma'] * 100 if item['ma'] else 0
-            above_tree.insert('', 'end', values=(
-                item['ticker'], f"{item['close']:.2f}", f"{item['ma']:.2f}", f"+{dist:.1f}%"
-            ), tags=('positive',))
+            above_items.append({
+                'values': (item['ticker'], f"{item['close']:.2f}", f"{item['ma']:.2f}", f"+{dist:.1f}%"),
+                'tags': ('positive',),
+            })
+        tree_batch_insert(above_tree, above_items, clear=False)
 
         below_tree = ttk.Treeview(below_frame, columns=cols, show='headings', height=20)
         for col in cols:
@@ -2107,11 +2125,14 @@ class CreateStrategyApp:
         below_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         below_tree.tag_configure('negative', foreground='#cc0000')
 
+        below_items = []
         for item in breadth.get('below_items', []):
             dist = (item['ma'] - item['close']) / item['ma'] * 100 if item['ma'] else 0
-            below_tree.insert('', 'end', values=(
-                item['ticker'], f"{item['close']:.2f}", f"{item['ma']:.2f}", f"-{dist:.1f}%"
-            ), tags=('negative',))
+            below_items.append({
+                'values': (item['ticker'], f"{item['close']:.2f}", f"{item['ma']:.2f}", f"-{dist:.1f}%"),
+                'tags': ('negative',),
+            })
+        tree_batch_insert(below_tree, below_items, clear=False)
 
     def _schedule_regime_update(self):
         try:
@@ -2277,18 +2298,28 @@ class CreateStrategyApp:
 
         def run():
             from datetime import datetime, timedelta
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             end = datetime.now().strftime('%Y-%m-%d')
             start = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
-            price_data = {}
-            for t in tickers:
+
+            def fetch_one(t):
                 try:
                     candles = self.get_stock_data(t, start, end)
                     if isinstance(candles, list) and len(candles) >= 5:
                         closes = [float(c[1]) for c in candles if c and len(c) >= 2]
                         if len(closes) >= 5:
-                            price_data[t] = closes
+                            return t, closes
                 except Exception:
                     pass
+                return t, None
+
+            price_data = {}
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures = {pool.submit(fetch_one, t): t for t in tickers}
+                for f in as_completed(futures, timeout=120):
+                    t, closes = f.result()
+                    if closes is not None:
+                        price_data[t] = closes
 
             if len(price_data) < 2:
                 self.root.after(0, lambda: self.watchlist_ui.status_label.configure(
@@ -2361,25 +2392,37 @@ class CreateStrategyApp:
         self.news_ui.status_label.configure(text='Анализ новостей...')
 
         def run():
-            config = __import__('news.provider', fromlist=['load_ai_config']).load_ai_config()
-            max_news = config.get('max_news', 50)
-            results = self.news_analyzer.fetch_and_analyze(count=max_news)
+            try:
+                from news.provider import load_ai_config
+                config = load_ai_config()
+                max_news = config.get('max_news', 50)
+                results = self.news_analyzer.fetch_and_analyze(count=max_news)
 
-            def show():
-                self.news_ui.update_news(results)
-                self.news_ui.status_label.configure(
-                    text=f'{len(results)} новостей проанализировано')
-            self.root.after(0, show)
+                def show():
+                    self.news_ui.update_news(results)
+                    self.news_ui.status_label.configure(
+                        text=f'{len(results)} новостей проанализировано')
+                self.root.after(0, show)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                err_msg = str(e)[:80]
+                self.root.after(0, lambda: self.news_ui.status_label.configure(
+                    text=f'Ошибка: {err_msg}'))
 
         import threading
         threading.Thread(target=run, daemon=True).start()
 
     def _on_news_settings(self):
+        old = self.news_ui._on_settings
+        self.news_ui._on_settings = None
         self.news_ui._show_settings()
+        self.news_ui._on_settings = old
         self.news_analyzer._rebuild_provider()
 
     def _auto_news_callback(self):
-        config = __import__('news.provider', fromlist=['load_ai_config']).load_ai_config()
+        from news.provider import load_ai_config
+        config = load_ai_config()
         max_news = config.get('max_news', 50)
         results = self.news_analyzer.fetch_and_analyze(count=max_news)
         positive = [r for r in results if r.get('sentiment') == 'positive']

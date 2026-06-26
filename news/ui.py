@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from typing import Callable, List, Optional, Dict
 
 from news.provider import load_ai_config, save_ai_config
+from utils import tree_batch_insert
 
 
 class NewsUI:
@@ -53,9 +54,11 @@ class NewsUI:
 
         self.ticker_filter_var = tk.StringVar()
         ttk.Label(ctrl, text='Тикер:').pack(side=tk.LEFT, padx=(5, 2))
-        ticker_entry = ttk.Entry(ctrl, textvariable=self.ticker_filter_var, width=10)
-        ticker_entry.pack(side=tk.LEFT, padx=2)
-        ticker_entry.bind('<Return>', lambda e: self._apply_filter())
+        self.ticker_filter_combo = ttk.Combobox(ctrl, textvariable=self.ticker_filter_var,
+                                                  values=self._all_tickers, width=10)
+        self.ticker_filter_combo.pack(side=tk.LEFT, padx=2)
+        self.ticker_filter_combo.bind('<<ComboboxSelected>>', lambda e: self._apply_filter())
+        self.ticker_filter_combo.bind('<Return>', lambda e: self._apply_filter())
 
         self.status_label = ttk.Label(ctrl, text='', font=('', 9))
         self.status_label.pack(side=tk.RIGHT, padx=5)
@@ -181,18 +184,22 @@ class NewsUI:
 
     def update_news(self, results: List[Dict]):
         self._last_results = results
+        all_tickers = set(self._all_tickers)
+        for r in results:
+            for t in r.get('tickers', []):
+                if isinstance(t, str):
+                    all_tickers.add(t)
+        sorted_tickers = sorted(all_tickers)
+        self.ticker_filter_combo.configure(values=sorted_tickers)
         self._apply_filter()
 
     def _apply_filter(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
         sentiment_filter = self.sentiment_var.get()
         ticker_filter = self.ticker_filter_var.get().strip().upper()
 
         sent_labels = {'positive': 'Позитив', 'neutral': 'Нейтрал', 'negative': 'Негатив'}
 
-        count = 0
+        items = []
         for r in self._last_results:
             sentiment = r.get('sentiment', 'neutral')
             if sentiment_filter != 'Все' and sentiment != sentiment_filter:
@@ -210,14 +217,15 @@ class NewsUI:
             rec = r.get('recommendation', '')
             tag = sentiment
 
-            self.tree.insert('', 'end', values=(
-                published, title,
-                sent_labels.get(sentiment, sentiment),
-                impact, tickers_str, rec,
-            ), tags=(tag,))
-            count += 1
+            items.append({
+                'values': (published, title,
+                           sent_labels.get(sentiment, sentiment),
+                           impact, tickers_str, rec),
+                'tags': (tag,),
+            })
 
-        self.status_label.configure(text=f'{count} новостей')
+        tree_batch_insert(self.tree, items)
+        self.status_label.configure(text=f'{len(items)} новостей')
 
     def _on_select(self, event=None):
         sel = self.tree.selection()

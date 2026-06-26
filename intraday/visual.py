@@ -3,6 +3,8 @@ from tkinter import ttk, messagebox as mb
 import threading
 import logging
 from datetime import datetime
+
+from utils import tree_batch_insert
 import urllib3
 import numpy as np
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -753,11 +755,10 @@ class IntradaySmartScannerUI:
 
     def show_results(self, results):
         self._all_results = results
-        for item in self.tree.get_children():
-            self.tree.delete(item)
 
         names = {k: v['name'] for k, v in SOLABUTO_REGISTRY.items()}
 
+        items = []
         for rank, r in enumerate(results, 1):
             best_sid = r.get('best_strategy')
             best_name = names.get(best_sid, best_sid or '—')
@@ -780,7 +781,9 @@ class IntradaySmartScannerUI:
             tags = ()
             if isinstance(ret, (int, float)):
                 tags = ('positive',) if ret > 0 else ('negative',)
-            self.tree.insert('', 'end', values=values, tags=tags)
+            items.append({'values': values, 'tags': tags})
+
+        tree_batch_insert(self.tree, items)
 
         self.tree.tag_configure('positive', foreground='green')
         self.tree.tag_configure('negative', foreground='red')

@@ -5,6 +5,8 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from core.moex_cache import moex_cache, cached_get_tickers
+
 INDEX_TO_SECTOR = {
     'MOEXOG': 'Нефть и газ',
     'MOEXFN': 'Банки и финансы',
@@ -30,10 +32,17 @@ ALL_TICKERS_URL = (
 
 
 def fetch_all_moex_tickers():
+    cached = moex_cache.get('moex_tickers_tqbr')
+    if cached is not None:
+        return cached
     response = requests.get(ALL_TICKERS_URL, timeout=15, verify=False)
     response.raise_for_status()
     data = response.json()
-    return [row[0] for row in data['securities']['data']]
+    result = [row[0] for row in data['securities']['data']]
+    if result:
+        moex_cache.set('moex_tickers_tqbr', result, 4 * 3600)
+        moex_cache.flush()
+    return result
 
 
 def fetch_index_tickers(index_id):
@@ -59,16 +68,7 @@ def fetch_index_tickers(index_id):
 
 
 def fetch_all_sector_tickers():
-    result = {}
-    for index_id, sector in INDEX_TO_SECTOR.items():
-        try:
-            tickers = fetch_index_tickers(index_id)
-            for t in tickers:
-                if t not in result:
-                    result[t] = sector
-        except Exception:
-            logging.warning("Failed to fetch MOEX index %s", index_id)
-    return result
+    return fetch_all_sector_tickers_parallel()
 
 
 def fetch_all_sector_tickers_parallel(max_workers=10):

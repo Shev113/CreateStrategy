@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from typing import Callable, List, Optional
 
 from alerts.storage import AlertStorage, PriceAlert
+from utils import tree_batch_insert
 
 
 class AlertUI:
@@ -133,20 +134,21 @@ class AlertUI:
     def refresh(self, alerts: List[PriceAlert] = None):
         if alerts is None:
             alerts = self._storage.get_all()
-        for item in self.tree.get_children():
-            self.tree.delete(item)
 
         cond_labels = {'above': 'Выше', 'below': 'Ниже'}
         active_count = 0
+        items = []
         for a in alerts:
             status = 'Сработал' if a.triggered else 'Активен'
             tag = 'triggered' if a.triggered else 'active'
             if not a.triggered:
                 active_count += 1
-            self.tree.insert('', 'end', values=(
-                a.ticker, f'{a.target_price:.2f}',
-                cond_labels.get(a.condition, a.condition),
-                a.created, status
-            ), tags=(tag,))
+            items.append({
+                'values': (a.ticker, f'{a.target_price:.2f}',
+                           cond_labels.get(a.condition, a.condition),
+                           a.created, status),
+                'tags': (tag,),
+            })
 
+        tree_batch_insert(self.tree, items)
         self.status_label.configure(text=f'Активных: {active_count}')

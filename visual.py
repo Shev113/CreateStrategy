@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from utils import normalize_numeric_params, sort_tickers_by_favorites, ToolTip
+from utils import normalize_numeric_params, sort_tickers_by_favorites, ToolTip, tree_batch_insert
 
 
 def _tip(widget, text):
@@ -1402,11 +1402,10 @@ class SmartScannerUI:
 
     def show_results(self, results):
         self._all_results = results
-        for item in self.tree.get_children():
-            self.tree.delete(item)
 
         strategy_reverse = {sid: name for sid, name in self._strategy_names}
 
+        items = []
         for rank, r in enumerate(results, 1):
             best_sid = r.get('best_strategy')
             best_name = strategy_reverse.get(best_sid, best_sid or '—')
@@ -1429,7 +1428,9 @@ class SmartScannerUI:
             tags = ()
             if isinstance(ret, (int, float)):
                 tags = ('positive',) if ret > 0 else ('negative',)
-            self.tree.insert('', 'end', values=values, tags=tags)
+            items.append({'values': values, 'tags': tags})
+
+        tree_batch_insert(self.tree, items)
 
         self.tree.tag_configure('positive', foreground='green')
         self.tree.tag_configure('negative', foreground='red')
@@ -1571,9 +1572,8 @@ class DiaryUI:
         self.refresh()
 
     def refresh(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
         entries = self.storage.load()
+        items = []
         for e in entries:
             values = (
                 e.date, e.ticker, e.side, e.entry_price,
@@ -1588,7 +1588,9 @@ class DiaryUI:
                 tags = ('win',)
             elif e.pnl is not None and e.pnl <= 0:
                 tags = ('loss',)
-            item = self.tree.insert('', 'end', values=values, tags=tags)
+            items.append({'values': values, 'tags': tags})
+
+        tree_batch_insert(self.tree, items)
 
         self.tree.tag_configure('win', foreground='green')
         self.tree.tag_configure('loss', foreground='red')
@@ -1969,9 +1971,7 @@ class PositionDashboardUI:
             return 3.0
 
     def update_positions(self, positions):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-
+        items = []
         for p in positions:
             status = p.get('status', 'ok')
             tag = status if status in ('profit', 'loss', 'near_sl', 'near_tp') else 'ok'
@@ -1988,7 +1988,9 @@ class PositionDashboardUI:
                 f"{p.get('distance_tp_pct', 0):.1f}" if p.get('distance_tp_pct') is not None else '—',
                 self.STATUS_LABELS.get(status, status),
             )
-            self.tree.insert('', 'end', values=values, tags=(tag,))
+            items.append({'values': values, 'tags': (tag,)})
+
+        tree_batch_insert(self.tree, items)
 
     def update_alerts(self, alerts):
         self.alert_text.configure(state='normal')
@@ -2135,20 +2137,17 @@ class TradeReviewUI:
         self._draw_chart(result)
 
     def _fill_tree(self, tree, data, key_labels=None):
-        for row in tree.get_children():
-            tree.delete(row)
-
         sorted_items = sorted(data.items(), key=lambda x: x[1]['pnl'], reverse=True)
+        items = []
         for key, d in sorted_items:
             label = (key_labels.get(key, key) if key_labels else key)
             tag = 'positive' if d['pnl'] >= 0 else 'negative'
-            tree.insert('', 'end', values=(
-                label,
-                d['count'],
-                d['wins'],
-                f"{d['win_rate']:.1f}",
-                f"{d['pnl']:+,.2f}",
-            ), tags=(tag,))
+            items.append({
+                'values': (label, d['count'], d['wins'],
+                           f"{d['win_rate']:.1f}", f"{d['pnl']:+,.2f}"),
+                'tags': (tag,),
+            })
+        tree_batch_insert(tree, items)
 
     def _draw_chart(self, result):
         if self.chart_canvas is not None:
@@ -2293,16 +2292,16 @@ class NotificationSettingsUI:
                    command=self._save).pack(side=tk.RIGHT, padx=2)
 
     def _refresh_history(self):
-        for row in self.hist_tree.get_children():
-            self.hist_tree.delete(row)
-
         from monitoring.notification_manager import TRIGGER_TYPES
+        items = []
         for n in reversed(self.nm.history):
             trig_label = TRIGGER_TYPES.get(n.trigger_type, n.trigger_type)
             tag = 'warning' if n.icon == 'warning' else ('error' if n.icon == 'error' else '')
-            self.hist_tree.insert('', 'end', values=(
-                n.timestamp, trig_label, n.title, n.message[:80],
-            ), tags=(tag,))
+            items.append({
+                'values': (n.timestamp, trig_label, n.title, n.message[:80]),
+                'tags': (tag,),
+            })
+        tree_batch_insert(self.hist_tree, items)
 
     def _clear_history(self):
         self.nm.clear_history()
@@ -2697,21 +2696,21 @@ class PairsTradingUI:
 
     def update_pairs(self, pairs):
         self._pairs = pairs
-        for row in self.pair_tree.get_children():
-            self.pair_tree.delete(row)
-
+        items = []
         for rank, p in enumerate(pairs, 1):
             tag = 'coint' if p['p_value'] <= 0.05 else 'weak'
-            self.pair_tree.insert('', 'end', values=(
-                rank,
-                f"{p['ticker_y']}/{p['ticker_x']}",
-                f"{p['correlation']:.2f}",
-                f"{p['hedge_ratio']:.3f}",
-                f"{p['adf_stat']:.1f}",
-                f"{p['p_value']:.3f}",
-                f"{p['half_life']:.1f}",
-                f"{p['zscore_last']:+.2f}",
-            ), tags=(tag,))
+            items.append({
+                'values': (rank,
+                           f"{p['ticker_y']}/{p['ticker_x']}",
+                           f"{p['correlation']:.2f}",
+                           f"{p['hedge_ratio']:.3f}",
+                           f"{p['adf_stat']:.1f}",
+                           f"{p['p_value']:.3f}",
+                           f"{p['half_life']:.1f}",
+                           f"{p['zscore_last']:+.2f}"),
+                'tags': (tag,),
+            })
+        tree_batch_insert(self.pair_tree, items)
 
     def update_result(self, text):
         self.result_text.configure(state='normal')
@@ -2826,9 +2825,7 @@ class WatchlistUI:
             self._on_select(ticker)
 
     def update_watchlist(self, items):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-
+        tree_items = []
         for item in items:
             change = item.get('change_pct', 0)
             if change > 0:
@@ -2852,15 +2849,16 @@ class WatchlistUI:
             div_y = item.get('div_yield')
             div_str = f'{div_y:.1f}' if div_y is not None else '—'
 
-            self.tree.insert('', 'end', values=(
-                item.get('ticker', ''),
-                f"{item.get('price', 0):.2f}" if item.get('price') else '—',
-                f"{change:+.2f}" if item.get('change_pct') is not None else '—',
-                div_str,
-                mc_str,
-                f"{item.get('volume', 0):,.0f}" if item.get('volume') else '—',
-                item.get('sector', ''),
-            ), tags=(tag,))
+            tree_items.append({
+                'values': (item.get('ticker', ''),
+                           f"{item.get('price', 0):.2f}" if item.get('price') else '—',
+                           f"{change:+.2f}" if item.get('change_pct') is not None else '—',
+                           div_str, mc_str,
+                           f"{item.get('volume', 0):,.0f}" if item.get('volume') else '—',
+                           item.get('sector', '')),
+                'tags': (tag,),
+            })
+        tree_batch_insert(self.tree, tree_items)
 
     def set_status(self, text):
         self.status_label.configure(text=text)
@@ -2934,9 +2932,7 @@ class SectorRotationUI:
             return 20
 
     def update_sectors(self, sectors):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-
+        items = []
         for s in sectors:
             avg = s.get('avg_ret', 0)
             if avg > 1:
@@ -2945,15 +2941,17 @@ class SectorRotationUI:
                 tag = 'weak'
             else:
                 tag = 'neutral'
-            self.tree.insert('', 'end', values=(
-                s.get('sector', ''),
-                f"{s.get('ret_5d', 0):+.1f}",
-                f"{s.get('ret_10d', 0):+.1f}",
-                f"{s.get('ret_20d', 0):+.1f}",
-                f"{avg:+.1f}",
-                s.get('trend', ''),
-                s.get('ticker_count', 0),
-            ), tags=(tag,))
+            items.append({
+                'values': (s.get('sector', ''),
+                           f"{s.get('ret_5d', 0):+.1f}",
+                           f"{s.get('ret_10d', 0):+.1f}",
+                           f"{s.get('ret_20d', 0):+.1f}",
+                           f"{avg:+.1f}",
+                           s.get('trend', ''),
+                           s.get('ticker_count', 0)),
+                'tags': (tag,),
+            })
+        tree_batch_insert(self.tree, items)
 
     def set_status(self, text):
         self.status_label.configure(text=text)
@@ -3170,23 +3168,23 @@ class SignalJournalUI:
             self.strategy_var.set('Все')
 
     def update_signals(self, signals):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-
+        items = []
         for s in signals:
             side = s.get('side', '')
             entered = s.get('entered', False)
             tag = ('buy' if side == 'BUY' else 'sell') if side else ''
             entered_tag = 'entered_yes' if entered else 'entered_no'
-            self.tree.insert('', 'end', values=(
-                s.get('date', ''),
-                s.get('ticker', ''),
-                side,
-                f"{s.get('price', 0):.2f}" if s.get('price') else '—',
-                s.get('strategy', ''),
-                f"{s.get('sl', 0):.2f}" if s.get('sl') else '—',
-                f"{s.get('tp', 0):.2f}" if s.get('tp') else '—',
-                'Да' if entered else 'Нет',
-            ), tags=(tag, entered_tag))
+            items.append({
+                'values': (s.get('date', ''),
+                           s.get('ticker', ''),
+                           side,
+                           f"{s.get('price', 0):.2f}" if s.get('price') else '—',
+                           s.get('strategy', ''),
+                           f"{s.get('sl', 0):.2f}" if s.get('sl') else '—',
+                           f"{s.get('tp', 0):.2f}" if s.get('tp') else '—',
+                           'Да' if entered else 'Нет'),
+                'tags': (tag, entered_tag),
+            })
+        tree_batch_insert(self.tree, items)
 
         self.count_label.configure(text=f'Сигналов: {len(signals)}')

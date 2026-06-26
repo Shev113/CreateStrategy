@@ -1,5 +1,6 @@
 import math
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import datetime, timedelta
 import requests
@@ -77,9 +78,24 @@ class IntradaySmartScanner:
         total_steps = len(tickers) * len(strategy_ids)
         base_defaults = get_solabuto_defaults('nr4')
 
+        data_map = {}
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            fut_to_ticker = {
+                pool.submit(_fetch_h1_data, t, date_from, date_to): t
+                for t in tickers
+            }
+            for f in as_completed(fut_to_ticker, timeout=120):
+                t = fut_to_ticker[f]
+                try:
+                    result = f.result()
+                    if result is not None and len(result) >= MIN_CANDLES:
+                        data_map[t] = result
+                except Exception:
+                    pass
+
         for ticker in tickers:
-            data = _fetch_h1_data(ticker, date_from, date_to)
-            if data is None or len(data) < MIN_CANDLES:
+            data = data_map.get(ticker)
+            if data is None:
                 total_processed += 1
                 continue
 

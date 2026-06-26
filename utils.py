@@ -86,6 +86,25 @@ def sort_tickers_by_favorites(all_tickers, favorites):
     return favs + others
 
 
+def tree_batch_insert(tree, items, clear=True):
+    """Batch-insert items into ttk.Treeview with minimized redraws.
+    
+    items: list of dicts with keys 'values' and optionally 'tags', 'iid'
+    """
+    if clear:
+        tree.delete(*tree.get_children())
+    if not items:
+        return
+    for item in items:
+        kwargs = {'values': item['values']}
+        if 'tags' in item:
+            kwargs['tags'] = item['tags']
+        if 'iid' in item:
+            kwargs['iid'] = item['iid']
+        tree.insert('', 'end', **kwargs)
+    tree.update_idletasks()
+
+
 class ToolTip:
     """Всплывающая подсказка при наведении на виджет."""
 
