@@ -76,6 +76,7 @@ a = Analysis(
         'cloud.provider',
         'cloud.sync',
         'cloud.ui',
+        'settings_dialog',
     ],
     hookspath=[],
     hooksconfig={},

@@ -37,6 +37,7 @@ from intraday.visual import IntradayUI
 from automation.scheduler import AutomationScheduler
 from automation.panel import AutomationPanel
 from cloud.ui import CloudPanel
+from settings_dialog import SettingsDialog
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir, tree_batch_insert
 from core.moex_cache import moex_cache, cached_get_tickers
 from core.session_store import get_cached_range, save_session, merge_candles
@@ -267,6 +268,10 @@ class CreateStrategyApp:
                                      command=self._show_notification_settings)
         self._notif_btn.pack(side=tk.RIGHT, padx=5)
 
+        self._settings_btn = ttk.Button(top_bar, text='Настройки', width=12,
+                                         command=self._show_settings)
+        self._settings_btn.pack(side=tk.RIGHT, padx=(0, 5))
+
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=1)
 
@@ -285,8 +290,6 @@ class CreateStrategyApp:
         tab_alerts = ttk.Frame(notebook)
         tab_news = ttk.Frame(notebook)
         tab_app_guide = ttk.Frame(notebook)
-        tab_automation = ttk.Frame(notebook)
-        tab_cloud = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
         notebook.add(tab_scanner, text='Сканер')
         notebook.add(tab_smart_scanner, text='Умный сканер')
@@ -301,8 +304,6 @@ class CreateStrategyApp:
         notebook.add(tab_signals, text='Сигналы')
         notebook.add(tab_alerts, text='Алерты')
         notebook.add(tab_news, text='AI Новости')
-        notebook.add(tab_automation, text='Автоматизация')
-        notebook.add(tab_cloud, text='Облако')
         notebook.add(tab_app_guide, text='Описание')
 
         tab_guide = ttk.Frame(notebook)
@@ -466,13 +467,13 @@ class CreateStrategyApp:
         self.scheduler.register_task('monitor_positions', self._auto_monitor_callback)
         self.scheduler.register_task('refresh_watchlist', self._auto_watchlist_callback)
         self.scheduler.register_task('auto_news_scan', self._auto_news_callback)
-        self.automation_panel = AutomationPanel(
-            tab_automation, self.scheduler,
+
+        self.settings_dialog = SettingsDialog(
+            self.root,
+            scheduler=self.scheduler,
             on_start_all=self._on_automation_start_all,
             on_stop_all=self._on_automation_stop_all,
         )
-
-        self.cloud_panel = CloudPanel(tab_cloud, self.root)
 
         from intraday.strategies import SOLABUTO_REGISTRY
         intraday_tickers = self.sector_db.get_tickers(self.sector_db.get_all_sectors())
@@ -743,6 +744,9 @@ class CreateStrategyApp:
     def _show_notification_settings(self):
         from visual import NotificationSettingsUI
         NotificationSettingsUI(self.root, self.notification_manager)
+
+    def _show_settings(self):
+        self.settings_dialog.show()
 
     def _apply_text_theme(self):
         is_dark = self._current_theme == 'dark'

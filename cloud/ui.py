@@ -11,23 +11,15 @@ from cloud.oauth import start_oauth_flow, get_valid_token, load_token, delete_to
 class CloudPanel:
     def __init__(self, parent, root):
         self.root = root
-        self.frame = ttk.Frame(parent)
         self._syncing = False
-        self._build_ui()
+        self._build_ui(parent)
 
-    def _build_ui(self):
-        main = ttk.Frame(self.frame, padding=15)
+    def _build_ui(self, parent):
+        main = ttk.Frame(parent, padding=10)
         main.pack(fill='both', expand=True)
 
-        title = ttk.Label(main, text='Синхронизация с Яндекс.Диском',
-                          font=('Segoe UI', 14, 'bold'))
-        title.pack(anchor='w', pady=(0, 10))
-
-        sep = ttk.Separator(main, orient='horizontal')
-        sep.pack(fill='x', pady=(0, 10))
-
         status_frame = ttk.LabelFrame(main, text='Статус подключения', padding=10)
-        status_frame.pack(fill='x', pady=(0, 10))
+        status_frame.pack(fill='x', pady=(0, 5))
 
         self._status_var = tk.StringVar(value='Проверка...')
         self._status_label = ttk.Label(status_frame, textvariable=self._status_var,
@@ -42,22 +34,22 @@ class CloudPanel:
                                           command=self._on_disconnect, state='disabled')
         self._disconnect_btn.pack(side='right')
 
-        settings_frame = ttk.LabelFrame(main, text='Настройки', padding=10)
-        settings_frame.pack(fill='x', pady=(0, 10))
+        settings_frame = ttk.LabelFrame(main, text='Настройки Яндекс.Диска', padding=10)
+        settings_frame.pack(fill='x', pady=(0, 5))
 
         ttk.Label(settings_frame, text='Client ID:').grid(row=0, column=0, sticky='w', pady=2)
         self._client_id_var = tk.StringVar(value=sync_manager.client_id)
-        ttk.Entry(settings_frame, textvariable=self._client_id_var, width=50).grid(
+        ttk.Entry(settings_frame, textvariable=self._client_id_var, width=45).grid(
             row=0, column=1, sticky='ew', padx=(5, 0), pady=2)
 
         ttk.Label(settings_frame, text='Client Secret:').grid(row=1, column=0, sticky='w', pady=2)
         self._client_secret_var = tk.StringVar(value=sync_manager.client_secret)
-        ttk.Entry(settings_frame, textvariable=self._client_secret_var, width=50,
+        ttk.Entry(settings_frame, textvariable=self._client_secret_var, width=45,
                   show='*').grid(row=1, column=1, sticky='ew', padx=(5, 0), pady=2)
 
         ttk.Label(settings_frame, text='Пароль синка:').grid(row=2, column=0, sticky='w', pady=2)
         self._password_var = tk.StringVar(value=sync_manager.sync_password)
-        ttk.Entry(settings_frame, textvariable=self._password_var, width=50,
+        ttk.Entry(settings_frame, textvariable=self._password_var, width=45,
                   show='*').grid(row=2, column=1, sticky='ew', padx=(5, 0), pady=2)
 
         self._auto_sync_var = tk.BooleanVar(value=sync_manager.auto_sync_on_close)
@@ -71,21 +63,19 @@ class CloudPanel:
 
         settings_frame.columnconfigure(1, weight=1)
 
-        help_frame = ttk.LabelFrame(main, text='Как получить Client ID и Secret', padding=10)
-        help_frame.pack(fill='x', pady=(0, 10))
+        help_frame = ttk.LabelFrame(main, text='Инструкция', padding=10)
+        help_frame.pack(fill='x', pady=(0, 5))
         help_text = (
             '1. Откройте https://oauth.yandex.ru/\n'
-            '2. Нажмите "Зарегистрировать новое приложение"\n'
-            '3. Название: CreateStrategy\n'
-            '4. Платформы: Веб-сервисы → Redirect URI: http://localhost:9876\n'
-            '5. Доступ: Яндекс.Диск (чтение и запись)\n'
-            '6. Скопируйте Client ID и Client Secret'
+            '2. Зарегистрируйте приложение (Веб-сервисы, Redirect URI: http://localhost:9876)\n'
+            '3. Дайте доступ: Яндекс.Диск (чтение/запись)\n'
+            '4. Скопируйте Client ID и Client Secret выше'
         )
         ttk.Label(help_frame, text=help_text, font=('Segoe UI', 9),
                   foreground='gray', justify='left').pack(anchor='w')
 
         actions_frame = ttk.LabelFrame(main, text='Синхронизация', padding=10)
-        actions_frame.pack(fill='x', pady=(0, 10))
+        actions_frame.pack(fill='x', pady=(0, 5))
 
         btn_row = ttk.Frame(actions_frame)
         btn_row.pack(fill='x')
@@ -114,17 +104,16 @@ class CloudPanel:
                                          font=('Segoe UI', 9), foreground='#4CAF50')
         self._result_label.pack(anchor='w', pady=(5, 0))
 
-        files_frame = ttk.LabelFrame(main, text='Файлы для синка', padding=10)
+        files_frame = ttk.LabelFrame(main, text='Файлы', padding=10)
         files_frame.pack(fill='both', expand=True, pady=(0, 0))
 
-        cols = ('Файл', 'Шифрование', 'Локальный', 'Облачный', 'Последний синк')
-        self._files_tree = ttk.Treeview(files_frame, columns=cols, show='headings', height=11)
+        cols = ('Файл', 'Шифр', 'Лок.', 'Обл.', 'Последний синк')
+        self._files_tree = ttk.Treeview(files_frame, columns=cols, show='headings', height=8)
         for c in cols:
             self._files_tree.heading(c, text=c)
-            self._files_tree.column(c, width=120, minwidth=80)
-        self._files_tree.column('Файл', width=180)
-        self._files_tree.column('Шифрование', width=90)
-        self._files_tree.column('Последний синк', width=160)
+            self._files_tree.column(c, width=100, minwidth=60)
+        self._files_tree.column('Файл', width=160)
+        self._files_tree.column('Последний синк', width=140)
 
         vsb = ttk.Scrollbar(files_frame, orient='vertical', command=self._files_tree.yview)
         self._files_tree.configure(yscrollcommand=vsb.set)
@@ -292,17 +281,4 @@ class CloudPanel:
         else:
             self._upload_btn.config(state=state)
             self._download_btn.config(state=state)
-            self._sync_btn.config(state=state)
-
-
-def run_auto_sync_on_close(root):
-    if not sync_manager.auto_sync_on_close:
-        return
-    if not sync_manager.is_connected():
-        return
-
-    import tkinter.simpledialog as simpledialog
-
-    result = sync_manager.upload_all()
-    if result.errors:
-        logging.warning(f'Auto-sync errors: {result.errors}')
+            self._sync_btn.config(state='disabled')
