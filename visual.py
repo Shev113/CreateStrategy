@@ -41,7 +41,7 @@ class StockAppVisual:
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
                  on_optimize=None, on_portfolio=None, on_walkforward=None,
-                 on_sensitivity=None,
+                 on_sensitivity=None, on_fundamental=None,
                  favorites=None, on_toggle_favorite=None,
                  sector_db=None):
         self.root = parent.winfo_toplevel()
@@ -189,11 +189,15 @@ class StockAppVisual:
         self.sensitivity_button.grid(row=1, column=2, padx=2, pady=1)
         ToolTip(self.sensitivity_button, 'Анализ чувствительности — насколько результат зависит от параметров.\nВарьирует каждый параметр ±5/10/20% и показывает влияние на Sharpe.\nПомогает понять, какие параметры критичны, а какие нет.')
 
+        self.fundamental_button = ttk.Button(
+            action_frame, text="7. Фундам.", command=lambda: on_fundamental() if on_fundamental else None)
+        self.fundamental_button.grid(row=1, column=3, padx=2, pady=1)
+        ToolTip(self.fundamental_button, 'Фундаментальный анализ — мультипликаторы, дивиденды, скоринг.\nP/E, P/B, дивидендная доходность, капитализация,\nистория дивидендов и рекомендация ПОКУПАТЬ/ДЕРЖАТЬ/ИЗБЕГАТЬ.')
+
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
         action_frame.grid_columnconfigure(2, weight=1)
-        action_frame.grid_columnconfigure(0, weight=1)
-        action_frame.grid_columnconfigure(1, weight=1)
+        action_frame.grid_columnconfigure(3, weight=1)
 
         # Second btn row: Настройки, В дневник, Индивид., Сохранить
         btn_row = ttk.Frame(parent)
@@ -253,10 +257,18 @@ class StockAppVisual:
         self.sector_exposure_entry.grid(row=0, column=7, padx=2)
         ToolTip(self.sector_exposure_entry, 'Макс. доля капитала в одном секторе (%).\n30 = не более 30% капитала в одном секторе.\n0 = без лимита. Требуется загрузка секторов.')
 
-        parent.grid_rowconfigure(9, weight=1)
+        parent.grid_rowconfigure(10, weight=1)
+
+        self.top_signals_frame = ttk.LabelFrame(parent, text='Последние сигналы')
+        self.top_signals_frame.grid(row=9, column=0, columnspan=2, padx=5, pady=(2, 0), sticky='ew')
+        self._top_signals_labels = []
+        for i in range(5):
+            lbl = ttk.Label(self.top_signals_frame, text='', font=('Consolas', 9), anchor='w')
+            lbl.pack(fill=tk.X, padx=3, pady=1)
+            self._top_signals_labels.append(lbl)
 
         self.backtest_text = tk.Text(parent, height=8, width=55)
-        self.backtest_text.grid(row=9, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+        self.backtest_text.grid(row=10, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
         _add_copy_menu(self.backtest_text)
         ToolTip(self.backtest_text, 'Результаты бэктеста, оптимизации, портфеля и walk-forward.\nПоказывает статистику сделок, профит-фактор, просадку и т.д.\nПравый клик — копировать выделенное.', delay=300)
 
@@ -265,6 +277,29 @@ class StockAppVisual:
 
     def disable_save_results_button(self):
         self._save_results_btn.config(state='disabled')
+
+    def update_top_signals(self, signals: list):
+        if not hasattr(self, '_top_signals_labels'):
+            return
+        side_icons = {'Лонг': '\u25b2', 'Шорт': '\u25bc'}
+        side_colors = {'Лонг': '#008800', 'Шорт': '#cc0000'}
+        for i, lbl in enumerate(self._top_signals_labels):
+            if i < len(signals):
+                s = signals[i]
+                side = s.get('side', '')
+                icon = side_icons.get(side, '')
+                color = side_colors.get(side, '')
+                ticker = s.get('ticker', '')
+                price = s.get('price', '')
+                price_str = f'@ {price:.2f}' if price and isinstance(price, (int, float)) else ''
+                strategy = s.get('strategy', '')
+                lbl.configure(text=f'{icon} {ticker} {side} {price_str}  [{strategy}]')
+                try:
+                    lbl.configure(foreground=color)
+                except Exception:
+                    pass
+            else:
+                lbl.configure(text='', foreground='')
 
     def _on_ticker_keyrelease(self, event):
         if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Escape'):
@@ -693,7 +728,8 @@ class StockAppVisual:
 
     def _settings_path(self):
         import os
-        return os.path.join('results', 'ticker_settings.json')
+        from utils import app_dir
+        return os.path.join(app_dir(), 'results', 'ticker_settings.json')
 
     def _save_current_settings(self):
         ticker = self._extract_ticker(self.stock_combobox.get())
@@ -835,6 +871,31 @@ class ScannerUI:
         self.scanner_date_to.pack(side=tk.LEFT, padx=2)
         self.scanner_date_to.insert(0, datetime.now().strftime("%Y-%m-%d"))
         ToolTip(self.scanner_date_to, 'Конечная дата периода для сканирования.\nФормат: гггг-мм-дд.\nПо умолчанию — текущая дата.')
+
+        fund_frame = ttk.LabelFrame(parent, text='Фундаментальный фильтр', padding=3)
+        fund_frame.grid(row=row, column=0, columnspan=2, sticky='ew', padx=5, pady=2)
+        row += 1
+
+        ff_row1 = ttk.Frame(fund_frame)
+        ff_row1.pack(fill=tk.X, pady=1)
+        ttk.Label(ff_row1, text='Мин. див.%:').pack(side=tk.LEFT, padx=2)
+        self.fund_min_div = ttk.Entry(ff_row1, width=6)
+        self.fund_min_div.pack(side=tk.LEFT, padx=2)
+        self.fund_min_div.insert(0, '0')
+
+        ttk.Label(ff_row1, text='Макс. P/E:').pack(side=tk.LEFT, padx=(10, 2))
+        self.fund_max_pe = ttk.Entry(ff_row1, width=6)
+        self.fund_max_pe.pack(side=tk.LEFT, padx=2)
+        self.fund_max_pe.insert(0, '0')
+
+        ttk.Label(ff_row1, text='Мин. капит. (млрд):').pack(side=tk.LEFT, padx=(10, 2))
+        self.fund_min_cap = ttk.Entry(ff_row1, width=8)
+        self.fund_min_cap.pack(side=tk.LEFT, padx=2)
+        self.fund_min_cap.insert(0, '0')
+
+        self.fund_enabled_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ff_row1, text='Применить', variable=self.fund_enabled_var).pack(side=tk.LEFT, padx=(10, 2))
+        ToolTip(fund_frame, 'Фильтр по фундаментальным показателям.\nМин. див.% — минимальная дивидендная доходность.\nМакс. P/E — максимальный P/E (0 = не фильтровать).\nМин. капит. — минимальная капитализация в млрд руб.\nВключите чекбокс «Применить» для активации.')
 
         btn_frame = ttk.Frame(parent)
         btn_frame.grid(row=row, column=0, columnspan=2, pady=5)
@@ -1061,6 +1122,31 @@ class ScannerUI:
             return params
         except (ValueError, TypeError):
             return None
+
+    def get_fund_filter(self):
+        enabled = self.fund_enabled_var.get()
+        if not enabled:
+            return None
+        try:
+            min_div = float(self.fund_min_div.get().strip())
+        except (ValueError, TypeError):
+            min_div = 0
+        try:
+            max_pe = float(self.fund_max_pe.get().strip())
+        except (ValueError, TypeError):
+            max_pe = 0
+        try:
+            min_cap = float(self.fund_min_cap.get().strip())
+        except (ValueError, TypeError):
+            min_cap = 0
+        criteria = {}
+        if min_div > 0:
+            criteria['min_div_yield'] = min_div
+        if max_pe > 0:
+            criteria['max_pe'] = max_pe
+        if min_cap > 0:
+            criteria['min_market_cap'] = min_cap * 1e9
+        return criteria if criteria else None
 
     def show_report(self, report_text):
         self.scanner_result_text.delete(1.0, tk.END)
@@ -1529,9 +1615,10 @@ class DiaryUI:
     def _export_csv(self):
         import csv
         from datetime import datetime
-        os.makedirs('results', exist_ok=True)
+        from utils import app_dir
+        os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        path = f'results/diary_{ts}.csv'
+        path = os.path.join(app_dir(), f'results/diary_{ts}.csv')
         entries = self.storage.load()
         with open(path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
@@ -2259,6 +2346,7 @@ class PerformanceAnalyticsUI:
         ('monthly', 'По месяцам'),
         ('rolling_wr', 'Скользящий WR'),
         ('rolling_pnl', 'Скользящий P&L'),
+        ('drawdown', 'Просадки (underwater)'),
     ]
 
     def __init__(self, parent, on_analyze=None):
@@ -2409,6 +2497,14 @@ class PerformanceAnalyticsUI:
             from analytics.visualizations import plot_rolling_metric
             rp = m.get('rolling_pnl', [])
             fig = plot_rolling_metric(rp, window_label='P&L (RUB)', title='Rolling P&L')
+
+        elif chart_key == 'drawdown':
+            if self._last_trades:
+                from analytics.drawdown import calc_underwater_data
+                from analytics.visualizations import plot_drawdown_underwater
+                uw = calc_underwater_data(self._last_trades)
+                if uw.get('drawdown'):
+                    fig = plot_drawdown_underwater(uw)
 
         if fig is None:
             ttk.Label(self.chart_frame, text='Нет данных для графика').pack(pady=20)
@@ -2625,3 +2721,472 @@ class PairsTradingUI:
 
     def set_status(self, text):
         self.status_label.configure(text=text)
+
+
+class WatchlistUI:
+    COLS = ('ticker', 'price', 'change_pct', 'div_yield', 'market_cap', 'volume', 'sector')
+    HEADERS = {
+        'ticker': 'Тикер', 'price': 'Цена', 'change_pct': 'Изм. %',
+        'div_yield': 'Див.%', 'market_cap': 'Капитализ.', 'volume': 'Объём', 'sector': 'Сектор',
+    }
+    WIDTHS = {
+        'ticker': 80, 'price': 90, 'change_pct': 70, 'div_yield': 60,
+        'market_cap': 100, 'volume': 90, 'sector': 120,
+    }
+
+    def __init__(self, parent, on_add=None, on_remove=None, on_refresh=None,
+                 on_select=None, on_dividends=None, on_correlation=None,
+                 all_tickers=None):
+        self.parent = parent
+        self._on_add = on_add
+        self._on_remove = on_remove
+        self._on_refresh = on_refresh
+        self._on_select = on_select
+        self._on_dividends = on_dividends
+        self._on_correlation = on_correlation
+        self._all_tickers = list(all_tickers) if all_tickers else []
+
+        main = ttk.Frame(parent)
+        main.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl = ttk.Frame(main)
+        ctrl.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(ctrl, text='Тикер:').pack(side=tk.LEFT, padx=2)
+        self.ticker_combo = ttk.Combobox(ctrl, values=self._all_tickers, width=12)
+        self.ticker_combo.pack(side=tk.LEFT, padx=2)
+        self.ticker_combo.bind('<Return>', lambda e: self._add())
+
+        ttk.Button(ctrl, text='Добавить', command=self._add).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text='Удалить', command=self._remove).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text='Обновить цены', command=self._refresh).pack(side=tk.LEFT, padx=(15, 2))
+        ttk.Button(ctrl, text='Дивиденды', command=self._divs).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text='Корреляция', command=self._corr).pack(side=tk.LEFT, padx=2)
+
+        self.status_label = ttk.Label(ctrl, text='', font=('', 9))
+        self.status_label.pack(side=tk.RIGHT, padx=5)
+
+        tree_frame = ttk.Frame(main)
+        tree_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.tree = ttk.Treeview(tree_frame, columns=self.COLS,
+                                  show='headings', height=15, selectmode='browse')
+        for col in self.COLS:
+            self.tree.heading(col, text=self.HEADERS[col])
+            self.tree.column(col, width=self.WIDTHS[col], anchor='center')
+
+        scroll = ttk.Scrollbar(tree_frame, orient='vertical',
+                                command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.tag_configure('up', foreground='#00aa00')
+        self.tree.tag_configure('down', foreground='#cc0000')
+        self.tree.tag_configure('neutral', foreground='#888888')
+
+        if self._on_select:
+            self.tree.bind('<<TreeviewSelect>>', self._on_select_click)
+
+    def _add(self):
+        ticker = self.ticker_combo.get().strip().upper()
+        if not ticker:
+            return
+        if self._on_add:
+            self._on_add(ticker)
+        self.ticker_combo.set('')
+
+    def _remove(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self.tree.index(sel[0])
+        values = self.tree.item(sel[0])['values']
+        ticker = str(values[0]) if values else ''
+        if ticker and self._on_remove:
+            self._on_remove(ticker)
+
+    def _refresh(self):
+        if self._on_refresh:
+            self._on_refresh()
+
+    def _divs(self):
+        if self._on_dividends:
+            self._on_dividends()
+
+    def _corr(self):
+        if self._on_correlation:
+            self._on_correlation()
+
+    def _on_select_click(self, event):
+        sel = self.tree.selection()
+        if sel and self._on_select:
+            values = self.tree.item(sel[0])['values']
+            ticker = str(values[0]) if values else ''
+            self._on_select(ticker)
+
+    def update_watchlist(self, items):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for item in items:
+            change = item.get('change_pct', 0)
+            if change > 0:
+                tag = 'up'
+            elif change < 0:
+                tag = 'down'
+            else:
+                tag = 'neutral'
+
+            mc = item.get('market_cap')
+            if mc:
+                if mc >= 1e12:
+                    mc_str = f'{mc / 1e12:.1f}T'
+                elif mc >= 1e9:
+                    mc_str = f'{mc / 1e9:.0f}M'
+                else:
+                    mc_str = f'{mc / 1e6:.0f}M'
+            else:
+                mc_str = '—'
+
+            div_y = item.get('div_yield')
+            div_str = f'{div_y:.1f}' if div_y is not None else '—'
+
+            self.tree.insert('', 'end', values=(
+                item.get('ticker', ''),
+                f"{item.get('price', 0):.2f}" if item.get('price') else '—',
+                f"{change:+.2f}" if item.get('change_pct') is not None else '—',
+                div_str,
+                mc_str,
+                f"{item.get('volume', 0):,.0f}" if item.get('volume') else '—',
+                item.get('sector', ''),
+            ), tags=(tag,))
+
+    def set_status(self, text):
+        self.status_label.configure(text=text)
+
+
+class SectorRotationUI:
+    COLS = ('sector', 'ret_5d', 'ret_10d', 'ret_20d', 'avg_ret', 'trend', 'tickers')
+    HEADERS = {
+        'sector': 'Сектор', 'ret_5d': '5д %', 'ret_10d': '10д %',
+        'ret_20d': '20д %', 'avg_ret': 'Средн. %', 'trend': 'Тренд',
+        'tickers': 'Тикеров',
+    }
+    WIDTHS = {
+        'sector': 130, 'ret_5d': 65, 'ret_10d': 65,
+        'ret_20d': 65, 'avg_ret': 70, 'trend': 80, 'tickers': 60,
+    }
+
+    def __init__(self, parent, on_scan=None, on_compare=None):
+        self.parent = parent
+        self._on_scan = on_scan
+        self._on_compare = on_compare
+
+        main = ttk.Frame(parent)
+        main.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl = ttk.Frame(main)
+        ctrl.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(ctrl, text='Период (дней):').pack(side=tk.LEFT, padx=2)
+        self.period_entry = ttk.Entry(ctrl, width=5)
+        self.period_entry.insert(0, '20')
+        self.period_entry.pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(ctrl, text='Сканировать', command=self._scan).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text='Фундаментал по сектору', command=self._compare).pack(side=tk.LEFT, padx=2)
+
+        self.status_label = ttk.Label(ctrl, text='', font=('', 9))
+        self.status_label.pack(side=tk.RIGHT, padx=5)
+
+        tree_frame = ttk.Frame(main)
+        tree_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.tree = ttk.Treeview(tree_frame, columns=self.COLS,
+                                  show='headings', height=15, selectmode='browse')
+        for col in self.COLS:
+            self.tree.heading(col, text=self.HEADERS[col])
+            self.tree.column(col, width=self.WIDTHS[col], anchor='center')
+
+        scroll = ttk.Scrollbar(tree_frame, orient='vertical',
+                                command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.tag_configure('strong', foreground='#00aa00')
+        self.tree.tag_configure('weak', foreground='#cc0000')
+        self.tree.tag_configure('neutral', foreground='#888888')
+
+    def _scan(self):
+        if self._on_scan:
+            self._on_scan()
+
+    def _compare(self):
+        if self._on_compare:
+            self._on_compare()
+
+    def get_period(self):
+        try:
+            return int(self.period_entry.get().strip())
+        except (ValueError, TypeError):
+            return 20
+
+    def update_sectors(self, sectors):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for s in sectors:
+            avg = s.get('avg_ret', 0)
+            if avg > 1:
+                tag = 'strong'
+            elif avg < -1:
+                tag = 'weak'
+            else:
+                tag = 'neutral'
+            self.tree.insert('', 'end', values=(
+                s.get('sector', ''),
+                f"{s.get('ret_5d', 0):+.1f}",
+                f"{s.get('ret_10d', 0):+.1f}",
+                f"{s.get('ret_20d', 0):+.1f}",
+                f"{avg:+.1f}",
+                s.get('trend', ''),
+                s.get('ticker_count', 0),
+            ), tags=(tag,))
+
+    def set_status(self, text):
+        self.status_label.configure(text=text)
+
+
+class PositionCalculatorUI:
+    def __init__(self, parent, on_calculate=None, get_current_price=None,
+                 all_tickers=None):
+        self.parent = parent
+        self._on_calculate = on_calculate
+        self._get_current_price = get_current_price
+        self._all_tickers = list(all_tickers) if all_tickers else []
+
+        main = ttk.Frame(parent)
+        main.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        input_frame = ttk.LabelFrame(main, text='Параметры', padding=10)
+        input_frame.pack(fill=tk.X, pady=(0, 10))
+
+        row1 = ttk.Frame(input_frame)
+        row1.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row1, text='Тикер:').pack(side=tk.LEFT, padx=2)
+        self.ticker_combo = ttk.Combobox(row1, values=self._all_tickers, width=12)
+        self.ticker_combo.pack(side=tk.LEFT, padx=2)
+        self.ticker_combo.bind('<Return>', lambda e: self._fill_price())
+
+        ttk.Label(row1, text='Цена входа:').pack(side=tk.LEFT, padx=(15, 2))
+        self.entry_price = ttk.Entry(row1, width=10)
+        self.entry_price.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row1, text='Цена SL:').pack(side=tk.LEFT, padx=(15, 2))
+        self.sl_price = ttk.Entry(row1, width=10)
+        self.sl_price.pack(side=tk.LEFT, padx=2)
+
+        row2 = ttk.Frame(input_frame)
+        row2.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row2, text='Капитал (руб.):').pack(side=tk.LEFT, padx=2)
+        self.capital_entry = ttk.Entry(row2, width=12)
+        self.capital_entry.insert(0, '1000000')
+        self.capital_entry.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row2, text='Риск на сделку (%):').pack(side=tk.LEFT, padx=(15, 2))
+        self.risk_pct_entry = ttk.Entry(row2, width=6)
+        self.risk_pct_entry.insert(0, '2.0')
+        self.risk_pct_entry.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(row2, text='Цена TP:').pack(side=tk.LEFT, padx=(15, 2))
+        self.tp_price = ttk.Entry(row2, width=10)
+        self.tp_price.pack(side=tk.LEFT, padx=2)
+
+        btn_frame = ttk.Frame(input_frame)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Button(btn_frame, text='Рассчитать', command=self._calc).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text='Загрузить цену', command=self._fill_price).pack(side=tk.LEFT, padx=2)
+
+        result_frame = ttk.LabelFrame(main, text='Результат', padding=10)
+        result_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.result_text = tk.Text(result_frame, wrap='word', font=('Consolas', 10),
+                                    height=12, state='disabled', padx=10, pady=10)
+        res_scroll = ttk.Scrollbar(result_frame, orient='vertical',
+                                    command=self.result_text.yview)
+        self.result_text.configure(yscrollcommand=res_scroll.set)
+        self.result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        res_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def _fill_price(self):
+        if self._get_current_price:
+            ticker = self.ticker_combo.get().strip().upper()
+            if ticker:
+                price = self._get_current_price(ticker)
+                if price:
+                    self.entry_price.delete(0, tk.END)
+                    self.entry_price.insert(0, f'{price:.2f}')
+
+    def _calc(self):
+        if self._on_calculate:
+            self._on_calculate()
+
+    def get_params(self):
+        try:
+            entry_price = float(self.entry_price.get().strip())
+        except (ValueError, TypeError):
+            entry_price = 0
+        try:
+            sl_price = float(self.sl_price.get().strip())
+        except (ValueError, TypeError):
+            sl_price = 0
+        try:
+            tp_price = float(self.tp_price.get().strip())
+        except (ValueError, TypeError):
+            tp_price = 0
+        try:
+            capital = float(self.capital_entry.get().strip())
+        except (ValueError, TypeError):
+            capital = 1_000_000
+        try:
+            risk_pct = float(self.risk_pct_entry.get().strip())
+        except (ValueError, TypeError):
+            risk_pct = 2.0
+        ticker = self.ticker_combo.get().strip().upper()
+
+        return {
+            'ticker': ticker,
+            'entry_price': entry_price,
+            'sl_price': sl_price,
+            'tp_price': tp_price,
+            'capital': capital,
+            'risk_pct': risk_pct,
+        }
+
+    def show_result(self, text):
+        self.result_text.configure(state='normal')
+        self.result_text.delete('1.0', tk.END)
+        self.result_text.insert(tk.END, text)
+        self.result_text.configure(state='disabled')
+
+
+class SignalJournalUI:
+    COLS = ('date', 'ticker', 'side', 'price', 'strategy', 'sl', 'tp', 'entered')
+    HEADERS = {
+        'date': 'Дата', 'ticker': 'Тикер', 'side': 'Напр.',
+        'price': 'Цена', 'strategy': 'Стратегия', 'sl': 'SL',
+        'tp': 'TP', 'entered': 'Вход?',
+    }
+    WIDTHS = {
+        'date': 90, 'ticker': 70, 'side': 55,
+        'price': 80, 'strategy': 100, 'sl': 70,
+        'tp': 70, 'entered': 55,
+    }
+
+    def __init__(self, parent, on_filter=None, on_export=None,
+                 all_tickers=None, all_strategies=None):
+        self.parent = parent
+        self._on_filter = on_filter
+        self._on_export = on_export
+        self._all_tickers = list(all_tickers) if all_tickers else []
+        self._all_strategies_set = set(all_strategies) if all_strategies else set()
+
+        main = ttk.Frame(parent)
+        main.pack(fill=tk.BOTH, expand=1, padx=5, pady=5)
+
+        ctrl = ttk.Frame(main)
+        ctrl.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(ctrl, text='Тикер:').pack(side=tk.LEFT, padx=2)
+        self.ticker_filter = ttk.Combobox(ctrl, values=self._all_tickers, width=12)
+        self.ticker_filter.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(ctrl, text='Стратегия:').pack(side=tk.LEFT, padx=(10, 2))
+        self.strategy_var = tk.StringVar(value='Все')
+        strategy_vals = ['Все'] + sorted(all_strategies) if all_strategies else ['Все']
+        self.strategy_cb = ttk.Combobox(ctrl, textvariable=self.strategy_var,
+                                         values=strategy_vals, width=15,
+                                         state='readonly')
+        self.strategy_cb.pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(ctrl, text='Направление:').pack(side=tk.LEFT, padx=(10, 2))
+        self.side_var = tk.StringVar(value='Все')
+        ttk.Combobox(ctrl, textvariable=self.side_var,
+                      values=['Все', 'BUY', 'SELL'], width=6,
+                      state='readonly').pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(ctrl, text='Фильтр', command=self._filter).pack(side=tk.LEFT, padx=(10, 2))
+        ttk.Button(ctrl, text='Экспорт CSV', command=self._export).pack(side=tk.LEFT, padx=2)
+
+        self.count_label = ttk.Label(ctrl, text='', font=('', 9))
+        self.count_label.pack(side=tk.RIGHT, padx=5)
+
+        tree_frame = ttk.Frame(main)
+        tree_frame.pack(fill=tk.BOTH, expand=1)
+
+        self.tree = ttk.Treeview(tree_frame, columns=self.COLS,
+                                  show='headings', height=20, selectmode='browse')
+        for col in self.COLS:
+            self.tree.heading(col, text=self.HEADERS[col])
+            self.tree.column(col, width=self.WIDTHS[col], anchor='center')
+
+        scroll = ttk.Scrollbar(tree_frame, orient='vertical',
+                                command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.tag_configure('buy', foreground='#00aa00')
+        self.tree.tag_configure('sell', foreground='#cc0000')
+        self.tree.tag_configure('entered_yes', foreground='#0066cc')
+        self.tree.tag_configure('entered_no', foreground='#888888')
+
+    def _filter(self):
+        if self._on_filter:
+            self._on_filter()
+
+    def _export(self):
+        if self._on_export:
+            self._on_export()
+
+    def get_filters(self):
+        return {
+            'ticker': self.ticker_filter.get().strip().upper(),
+            'strategy': self.strategy_var.get(),
+            'side': self.side_var.get(),
+        }
+
+    def update_strategies(self, strategies):
+        all_set = set(strategies)
+        all_set.update(self._all_strategies_set)
+        values = ['Все'] + sorted(all_set)
+        self.strategy_cb.configure(values=values)
+        if self.strategy_var.get() not in values:
+            self.strategy_var.set('Все')
+
+    def update_signals(self, signals):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        for s in signals:
+            side = s.get('side', '')
+            entered = s.get('entered', False)
+            tag = ('buy' if side == 'BUY' else 'sell') if side else ''
+            entered_tag = 'entered_yes' if entered else 'entered_no'
+            self.tree.insert('', 'end', values=(
+                s.get('date', ''),
+                s.get('ticker', ''),
+                side,
+                f"{s.get('price', 0):.2f}" if s.get('price') else '—',
+                s.get('strategy', ''),
+                f"{s.get('sl', 0):.2f}" if s.get('sl') else '—',
+                f"{s.get('tp', 0):.2f}" if s.get('tp') else '—',
+                'Да' if entered else 'Нет',
+            ), tags=(tag, entered_tag))
+
+        self.count_label.configure(text=f'Сигналов: {len(signals)}')

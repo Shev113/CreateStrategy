@@ -1,11 +1,14 @@
 import json
 import logging
 import os
+import sys
 import threading
 import time
 
-SECTORS_PATH = os.path.join(os.path.dirname(__file__), 'sectors.json')
-CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'results', 'moex_sectors_cache.json')
+from utils import resource_path, app_dir
+
+SECTORS_PATH = resource_path(os.path.join('screening', 'sectors.json'))
+CACHE_PATH = os.path.join(app_dir(), 'results', 'moex_sectors_cache.json')
 CACHE_TTL = 86400
 CACHE_VERSION = 2
 

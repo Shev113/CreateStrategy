@@ -174,3 +174,84 @@ def plot_benchmark_comparison(equity_curve, benchmark_curve, title='Strategy vs 
 
     fig.tight_layout()
     return fig
+
+
+def plot_drawdown_underwater(uw_data, title='Underwater (Просадки)'):
+    try:
+        import matplotlib
+        matplotlib.use('TkAgg')
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+
+    drawdown = uw_data.get('drawdown', [])
+    if not drawdown:
+        return None
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    x = range(len(drawdown))
+    ax.fill_between(x, drawdown, 0, color='#cc0000', alpha=0.5)
+    ax.plot(x, drawdown, color='#cc0000', linewidth=0.8)
+
+    max_dd = uw_data.get('max_dd', 0)
+    max_dd_idx = uw_data.get('max_dd_idx', 0)
+    if max_dd_idx < len(drawdown):
+        ax.annotate(f'{max_dd:.1f}%', xy=(max_dd_idx, max_dd),
+                     fontsize=9, color='#880000', fontweight='bold',
+                     ha='center', va='top')
+
+    ax.axhline(y=0, color='black', linewidth=0.5)
+    ax.set_ylabel('Просадка %')
+    ax.set_xlabel('Сделки')
+    ax.set_title(title)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0f}%'))
+
+    trade_labels = uw_data.get('trade_labels', [])
+    if trade_labels:
+        step = max(1, len(trade_labels) // 15)
+        tick_pos = list(range(1, len(trade_labels) + 1, step))
+        ax.set_xticks(tick_pos)
+        ax.set_xticklabels([trade_labels[i - 1][:10] for i in tick_pos if i - 1 < len(trade_labels)],
+                           rotation=45, fontsize=7)
+
+    fig.tight_layout()
+    return fig
+
+
+def plot_correlation_heatmap(corr_data, title='Корреляционная матрица'):
+    try:
+        import matplotlib
+        matplotlib.use('TkAgg')
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+
+    tickers = corr_data.get('tickers', [])
+    matrix = corr_data.get('matrix', [])
+    if not tickers or not matrix:
+        return None
+
+    n = len(tickers)
+    fig, ax = plt.subplots(figsize=(max(6, n * 0.8), max(5, n * 0.7)))
+
+    import numpy as np
+    corr_arr = np.array(matrix)
+
+    im = ax.imshow(corr_arr, cmap='RdYlGn', vmin=-1, vmax=1, aspect='auto')
+    fig.colorbar(im, ax=ax, label='Корреляция')
+
+    ax.set_xticks(range(n))
+    ax.set_yticks(range(n))
+    ax.set_xticklabels(tickers, rotation=45, ha='right', fontsize=8)
+    ax.set_yticklabels(tickers, fontsize=8)
+
+    for i in range(n):
+        for j in range(n):
+            val = corr_arr[i, j]
+            color = 'white' if abs(val) > 0.5 else 'black'
+            ax.text(j, i, f'{val:.2f}', ha='center', va='center', fontsize=7, color=color)
+
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig

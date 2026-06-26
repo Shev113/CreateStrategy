@@ -69,6 +69,7 @@ class BacktestEngine:
         self._signal_func = None
         self._final_levels = []
         self._closed_trades = []  # for Kelly estimation
+        self.signal_recorder = None  # callable(ticker, side, price, sl, tp, entered)
 
     def _calc_position_size(self, capital, entry_price, sl_price, atr):
         if self.position_sizing == 2:
@@ -191,6 +192,12 @@ class BacktestEngine:
                 signal = pending_signal
                 pending_signal = None
                 if not self._mtf_allows(df, i, signal['side']):
+                    if self.signal_recorder:
+                        try:
+                            self.signal_recorder('', signal['side'], float(signal.get('level', 0)),
+                                                 signal.get('sl_price'), signal.get('tp_price'), False)
+                        except Exception:
+                            pass
                     continue
                 open_price = float(current_candle[0])
                 if self.entry_type == 1:
@@ -198,6 +205,12 @@ class BacktestEngine:
                     lo = float(current_candle[3])
                     hi = float(current_candle[2])
                     if not (lo <= level <= hi):
+                        if self.signal_recorder:
+                            try:
+                                self.signal_recorder('', signal['side'], level,
+                                                     signal.get('sl_price'), signal.get('tp_price'), False)
+                            except Exception:
+                                pass
                         continue
                     entry_price = level
                 else:
@@ -229,8 +242,13 @@ class BacktestEngine:
                     if self.partial_tp:
                         tp1 = entry_price + direction * self.partial_tp_ratio1 * entry_atr
                         position['tp1_price'] = round(tp1, 2)
+                    if self.signal_recorder:
+                        try:
+                            self.signal_recorder('', signal['side'], entry_price, sl,
+                                                 round(tp, 2), True)
+                        except Exception:
+                            pass
 
-            # Signal detection: check current candle, schedule for next
             if position is None and pending_signal is None and levels and has_atr:
                 signal = self._get_signal(candles_list, i, levels, atr)
                 if signal and i + 1 < len(df):
@@ -445,10 +463,11 @@ class BacktestEngine:
 
 
 def export_results(trades, metrics, symbol):
-    os.makedirs('results', exist_ok=True)
+    from utils import app_dir
+    os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    csv_path = f'results/trades_{symbol}_{ts}.csv'
+    csv_path = os.path.join(app_dir(), f'results/trades_{symbol}_{ts}.csv')
     if trades:
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=trades[0].keys())
@@ -458,7 +477,7 @@ def export_results(trades, metrics, symbol):
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             f.write("No trades\n")
 
-    json_path = f'results/summary_{symbol}_{ts}.json'
+    json_path = os.path.join(app_dir(), f'results/summary_{symbol}_{ts}.json')
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 

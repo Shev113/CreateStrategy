@@ -5,11 +5,9 @@ from dataclasses import dataclass, asdict, field, fields
 from datetime import datetime
 from typing import Optional
 
+from utils import app_dir
 
-DIARY_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'results', 'diary.json'
-)
+DIARY_PATH = os.path.join(app_dir(), 'results', 'diary.json')
 
 SIDE_MAP = {'BUY': 'LONG', 'SELL': 'SHORT'}
 

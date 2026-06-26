@@ -3,7 +3,10 @@
 import json
 import logging
 import os
+import sys
 import threading
+import traceback
+import tempfile
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -31,14 +34,16 @@ from strategy.levels import find_strong_zones
 from visual import StockAppVisual, ScannerUI, SmartScannerUI, DiaryUI, StrategyGuideUI, AppGuideUI, _add_copy_menu
 from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_position_volume
 from intraday.visual import IntradayUI
-from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites
+from automation.scheduler import AutomationScheduler
+from automation.panel import AutomationPanel
+from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('CreateStrategyTrading.log', encoding='utf-8'),
+        logging.FileHandler(os.path.join(app_dir(), 'CreateStrategyTrading.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -50,7 +55,7 @@ DEFAULT_END_DATE = datetime.now().strftime("%Y-%m-%d")
 MIN_CANDLES_FOR_BACKTEST = 30
 INITIAL_CAPITAL = 1_000_000
 DEFAULT_MIN_REPEATS = 5
-SESSION_STATE_PATH = os.path.join('results', 'session_state.json')
+SESSION_STATE_PATH = os.path.join(app_dir(), 'results', 'session_state.json')
 
 
 class StrategyAppState:
@@ -66,11 +71,35 @@ class CreateStrategyApp:
     """Основное приложение для анализа и backtesting стратегий"""
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
+        self.root.withdraw()
+
+        splash = tk.Toplevel(root)
+        splash.title("CreateStrategy")
+        splash.resizable(False, False)
+        splash.overrideredirect(True)
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+        splash.geometry(f"420x180+{(sw-420)//2}+{(sh-180)//2}")
+
+        _frm = tk.Frame(splash, bd=2, relief=tk.GROOVE)
+        _frm.pack(fill=tk.BOTH, expand=True)
+        tk.Label(_frm, text="CreateStrategy", font=("Segoe UI", 16, "bold")).pack(pady=(15, 2))
+        _lbl = tk.Label(_frm, text="Инициализация...", font=("Segoe UI", 10))
+        _lbl.pack()
+        _pb = ttk.Progressbar(_frm, mode="indeterminate", length=360)
+        _pb.pack(pady=8)
+        _pb.start(15)
+        splash.update()
+
         self.state = StrategyAppState()
         self.app = None
         self.scanner_ui = None
         self.diary_ui = None
+
+        _lbl.config(text="Загрузка секторов...")
+        splash.update()
         self.sector_db = SectorDB()
+
         self._last_scan_results = []
         self._last_scan_params = {}
         self._last_smart_results = []
@@ -81,10 +110,20 @@ class CreateStrategyApp:
         self._last_export_stock = None
         self._favorites = load_favorites()
         self._current_regime = None
+
+        _lbl.config(text="Загрузка дневника...")
+        splash.update()
         self.diary_storage = DiaryStorage()
+
+        _lbl.config(text="Загрузка уведомлений...")
+        splash.update()
         from monitoring.notification_manager import NotificationManager
         self.notification_manager = NotificationManager()
-        migrate_ticker_settings(os.path.join('results', 'ticker_settings.json'))
+
+        migrate_ticker_settings(os.path.join(app_dir(), 'results', 'ticker_settings.json'))
+
+        _lbl.config(text="Построение интерфейса...")
+        splash.update()
         self.setup_ui()
         self._load_session_state()
         self._start_auto_load_tickers()
@@ -92,6 +131,15 @@ class CreateStrategyApp:
         self.bind_events()
         self.root.after(1000, self._auto_check_positions)
         self.root.after(3000, self._update_market_regime)
+        self.root.after(2000, self._init_new_tabs)
+
+        _lbl.config(text="Запуск автоматизации...")
+        splash.update()
+        self._init_automation()
+
+        _pb.stop()
+        splash.destroy()
+        self.root.deiconify()
 
     def candles_to_df_custom(self, candles_list: list) -> pd.DataFrame | None:
         """Конвертация списка свечей в DataFrame"""
@@ -180,7 +228,13 @@ class CreateStrategyApp:
         tab_review = ttk.Frame(notebook)
         tab_analytics = ttk.Frame(notebook)
         tab_pairs = ttk.Frame(notebook)
+        tab_watchlist = ttk.Frame(notebook)
+        tab_sectors = ttk.Frame(notebook)
+        tab_calc = ttk.Frame(notebook)
+        tab_signals = ttk.Frame(notebook)
+        tab_alerts = ttk.Frame(notebook)
         tab_app_guide = ttk.Frame(notebook)
+        tab_automation = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
         notebook.add(tab_scanner, text='Сканер')
         notebook.add(tab_smart_scanner, text='Умный сканер')
@@ -189,6 +243,12 @@ class CreateStrategyApp:
         notebook.add(tab_review, text='Обзор торговли')
         notebook.add(tab_analytics, text='Аналитика')
         notebook.add(tab_pairs, text='Пары')
+        notebook.add(tab_watchlist, text='Избранное')
+        notebook.add(tab_sectors, text='Секторы')
+        notebook.add(tab_calc, text='Калькулятор')
+        notebook.add(tab_signals, text='Сигналы')
+        notebook.add(tab_alerts, text='Алерты')
+        notebook.add(tab_automation, text='Автоматизация')
         notebook.add(tab_app_guide, text='Описание')
 
         tab_guide = ttk.Frame(notebook)
@@ -215,6 +275,7 @@ class CreateStrategyApp:
             on_portfolio=self.on_portfolio,
             on_walkforward=self.on_walkforward,
             on_sensitivity=self.on_sensitivity,
+            on_fundamental=self._on_fundamental,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db
@@ -272,8 +333,78 @@ class CreateStrategyApp:
             on_backtest=self._on_pairs_backtest,
         )
 
+        from visual import WatchlistUI, SectorRotationUI, PositionCalculatorUI, SignalJournalUI
+        from watchlist.storage import WatchlistStorage
+        from signals.storage import SignalStorage
+
+        self.watchlist_storage = WatchlistStorage()
+        _all_tickers = self.sector_db.get_all_tickers()
+        from strategy.config import get_strategy_names
+        _all_strategy_ids = [s[0] for s in get_strategy_names()]
+
+        self.watchlist_ui = WatchlistUI(
+            tab_watchlist,
+            on_add=self._on_watchlist_add,
+            on_remove=self._on_watchlist_remove,
+            on_refresh=self._on_watchlist_refresh,
+            on_select=self._on_watchlist_select,
+            on_dividends=self._on_dividend_calendar,
+            on_correlation=self._on_correlation_matrix,
+            all_tickers=_all_tickers,
+        )
+
+        self.sector_rotation_ui = SectorRotationUI(
+            tab_sectors,
+            on_scan=self._on_sector_scan,
+            on_compare=self._on_sector_compare,
+        )
+
+        self.pos_calc_ui = PositionCalculatorUI(
+            tab_calc,
+            on_calculate=self._on_pos_calc,
+            get_current_price=self._get_current_price,
+            all_tickers=_all_tickers,
+        )
+
+        self.signal_storage = SignalStorage()
+        self.signal_journal_ui = SignalJournalUI(
+            tab_signals,
+            on_filter=self._on_signal_filter,
+            on_export=self._on_signal_export,
+            all_tickers=_all_tickers,
+            all_strategies=_all_strategy_ids,
+        )
+
         self.guide_ui = StrategyGuideUI(tab_guide)
         self.app_guide_ui = AppGuideUI(tab_app_guide)
+
+        from alerts.storage import AlertStorage
+        from alerts.monitor import AlertMonitor
+        from alerts.ui import AlertUI
+        self.alert_storage = AlertStorage()
+        self.alert_monitor = AlertMonitor(
+            self.root, self.alert_storage, self._get_current_price,
+            on_triggered=self._on_alert_triggered,
+            on_refresh=self._on_alert_refresh,
+        )
+        self.alert_ui = AlertUI(
+            tab_alerts, self.alert_storage,
+            on_add=self._on_alert_add,
+            on_remove=self._on_alert_remove,
+            on_start=self._on_alert_start,
+            on_stop=self._on_alert_stop,
+            all_tickers=_all_tickers,
+        )
+
+        self.scheduler = AutomationScheduler(self.root)
+        self.scheduler.register_task('auto_scan', self._auto_scan_callback)
+        self.scheduler.register_task('monitor_positions', self._auto_monitor_callback)
+        self.scheduler.register_task('refresh_watchlist', self._auto_watchlist_callback)
+        self.automation_panel = AutomationPanel(
+            tab_automation, self.scheduler,
+            on_start_all=self._on_automation_start_all,
+            on_stop_all=self._on_automation_stop_all,
+        )
 
         from intraday.strategies import SOLABUTO_REGISTRY
         intraday_tickers = self.sector_db.get_tickers(self.sector_db.get_all_sectors())
@@ -360,10 +491,10 @@ class CreateStrategyApp:
             self.intraday_smart_ui.status_var.set('Ошибка: сначала запустите сканер.')
             return
         import os
-        os.makedirs('results', exist_ok=True)
+        os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
         from datetime import datetime
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        fpath = f'results/intraday_smart_scanner_{ts}.xlsx'
+        fpath = os.path.join(app_dir(), f'results/intraday_smart_scanner_{ts}.xlsx')
         try:
             import openpyxl
             from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -503,7 +634,7 @@ class CreateStrategyApp:
 
     def _save_session_state(self) -> None:
         import json
-        os.makedirs('results', exist_ok=True)
+        os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
         state = {
             'last_ticker': self.app.get_selected_ticker(),
             'last_capital': self._last_capital,
@@ -578,6 +709,17 @@ class CreateStrategyApp:
             tk.END,
             f"Загружено {total} эмитентов (+{added} из MOEX индексов)\n")
 
+        updated_tickers = self.sector_db.get_all_tickers()
+        if hasattr(self, 'watchlist_ui') and hasattr(self.watchlist_ui, 'ticker_combo'):
+            self.watchlist_ui._all_tickers = updated_tickers
+            self.watchlist_ui.ticker_combo.configure(values=updated_tickers)
+        if hasattr(self, 'pos_calc_ui') and hasattr(self.pos_calc_ui, 'ticker_combo'):
+            self.pos_calc_ui._all_tickers = updated_tickers
+            self.pos_calc_ui.ticker_combo.configure(values=updated_tickers)
+        if hasattr(self, 'signal_journal_ui') and hasattr(self.signal_journal_ui, 'ticker_filter'):
+            self.signal_journal_ui._all_tickers = updated_tickers
+            self.signal_journal_ui.ticker_filter.configure(values=updated_tickers)
+
     def _start_auto_load_tickers(self):
         self.app.set_tickers_loading(True)
         self.sector_db.load_dynamic_async(on_complete=self._on_sectors_loaded)
@@ -589,6 +731,14 @@ class CreateStrategyApp:
         return self._favorites
 
     def _on_close(self) -> None:
+        try:
+            self.scheduler.stop_all()
+        except Exception:
+            pass
+        try:
+            self.alert_monitor.stop()
+        except Exception:
+            pass
         try:
             self._save_session_state()
         except Exception:
@@ -727,6 +877,24 @@ class CreateStrategyApp:
     def _run_backtest_task(self, params):
         try:
             engine = BacktestEngine(**params)
+            selected_stock = self.app.get_selected_ticker()
+            strategy_name = params.get('strategy', '')
+
+            def _record_signal(ticker, side, price, sl, tp, entered):
+                try:
+                    self.signal_storage.add_signal(
+                        ticker=selected_stock or ticker,
+                        side=side,
+                        price=price,
+                        strategy=strategy_name,
+                        sl=sl,
+                        tp=tp,
+                        entered=entered,
+                    )
+                except Exception:
+                    pass
+
+            engine.signal_recorder = _record_signal
             trades, metrics = engine.run(self.state.stock_data)
             selected_stock = self.app.get_selected_ticker()
             self._last_trades = trades
@@ -1054,6 +1222,61 @@ class CreateStrategyApp:
         self.app.add_backtest_result(f"Ошибка анализа чувствительности: {error_msg}")
         self.app.sensitivity_button.config(state='normal', text='6. Чувств.')
 
+    def _on_fundamental(self):
+        ticker = self.app.get_selected_ticker()
+        if not ticker:
+            self.app.add_backtest_result("Ошибка: выберите тикер")
+            return
+
+        self.app.fundamental_button.config(state='disabled', text='Загрузка...')
+        self.app.add_backtest_result(f"Загрузка фундаментальных данных {ticker}...")
+
+        def run():
+            from fundamental.data import fetch_all_tqbr_fundamentals, fetch_dividends, calc_dividend_yield, format_fundamental_report
+            from fundamental.scoring import compute_total_score, format_score_report
+            try:
+                all_data = fetch_all_tqbr_fundamentals()
+                td = all_data.get(ticker, {})
+                price = td.get('prev_price')
+                market_cap = td.get('market_cap')
+                shares = td.get('issue_size')
+
+                dividends = fetch_dividends(ticker)
+                div_yield = calc_dividend_yield(dividends, price) if dividends and price else None
+
+                fund_data = {
+                    'ticker': ticker,
+                    'price': price,
+                    'market_cap': market_cap,
+                    'shares': shares,
+                    'div_yield': div_yield,
+                    'dividends': dividends,
+                    'last_div': dividends[0] if dividends else None,
+                }
+
+                report = format_fundamental_report(fund_data)
+
+                total, details, rating = compute_total_score(fund_data)
+                score_report = format_score_report(total, details, rating)
+
+                full_report = report + '\n\n' + score_report
+                self.root.after(0, lambda: self._on_fundamental_complete(full_report))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_fundamental_error(str(e)))
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_fundamental_complete(self, report):
+        self.app.fundamental_button.config(state='normal', text='7. Фундам.')
+        txt = self.app.backtest_text
+        txt.delete(1.0, tk.END)
+        txt.insert(tk.END, report)
+
+    def _on_fundamental_error(self, error_msg):
+        self.app.add_backtest_result(f"Ошибка фундаментального анализа: {error_msg}")
+        self.app.fundamental_button.config(state='normal', text='7. Фундам.')
+
     def on_portfolio(self) -> None:
         """Портфельный бэктест по тикерам из торгового дневника."""
         entries = self.diary_storage.load()
@@ -1209,12 +1432,13 @@ class CreateStrategyApp:
             self.scanner_ui.show_report("Ошибка: проверьте формат дат (гггг-мм-дд).")
             return
 
+        fund_filter = self.scanner_ui.get_fund_filter()
         self._last_scan_params = params
 
         def run_scan():
             try:
                 scanner = Scanner(sector_db=self.sector_db, fetch_fn=self.get_stock_data)
-                ticker_settings_path = os.path.join('results', 'ticker_settings.json')
+                ticker_settings_path = os.path.join(app_dir(), 'results', 'ticker_settings.json')
                 results = scanner.scan(
                     sectors=selected,
                     date_from=date_from,
@@ -1223,11 +1447,35 @@ class CreateStrategyApp:
                     ticker_settings_path=ticker_settings_path,
                     progress_fn=lambda c, t, tick, sec: self.scanner_ui.update_progress(c, t, tick, sec)
                 )
+
+                if fund_filter:
+                    from fundamental.data import fetch_all_tqbr_fundamentals, fetch_dividends, calc_dividend_yield
+                    from fundamental.filters import filter_by_fundamentals
+                    result_tickers = {r.get('ticker') for r in results if r.get('ticker')}
+                    all_fund = fetch_all_tqbr_fundamentals()
+                    for ticker in result_tickers:
+                        td = all_fund.get(ticker)
+                        if not td:
+                            continue
+                        price = td.get('prev_price')
+                        if price:
+                            try:
+                                divs = fetch_dividends(ticker)
+                                td['div_yield'] = calc_dividend_yield(divs, price) if divs else None
+                                td['dividends'] = divs
+                                td['div_count'] = len(divs)
+                            except Exception:
+                                pass
+                    filtered_tickers = filter_by_fundamentals(all_fund, fund_filter)
+                    results = [r for r in results if r.get('ticker') in filtered_tickers]
+
                 self._last_scan_results = results
                 n_custom = len(scanner.ticker_overrides_used)
                 report = generate_report(results, top_n=5, params=params)
                 if n_custom:
                     report += f"\n  Бумаг с индивид. настройками: {n_custom}"
+                if fund_filter:
+                    report += f"\n  Фундаментальный фильтр применён"
                 self.root.after(0, lambda: self.scanner_ui.show_report(report))
             except Exception as e:
                 self.root.after(0, lambda: self.scanner_ui.show_report(f"Ошибка: {str(e)}"))
@@ -1244,9 +1492,9 @@ class CreateStrategyApp:
             self.scanner_ui.show_report("Ошибка: сначала запустите сканер.")
             return
         from screening.reporter import export_to_excel
-        os.makedirs('results', exist_ok=True)
+        os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        fpath = f'results/scanner_{ts}.xlsx'
+        fpath = os.path.join(app_dir(), f'results/scanner_{ts}.xlsx')
         try:
             export_to_excel(self._last_scan_results, self._last_scan_params, fpath)
             self.scanner_ui.scanner_result_text.insert(tk.END, f"\n\nExcel сохранён: {fpath}")
@@ -1304,9 +1552,9 @@ class CreateStrategyApp:
             self.smart_scanner_ui.status_var.set("Ошибка: сначала запустите умный сканер.")
             return
         from screening.reporter import export_smart_scan_excel
-        os.makedirs('results', exist_ok=True)
+        os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        fpath = f'results/smart_scanner_{ts}.xlsx'
+        fpath = os.path.join(app_dir(), f'results/smart_scanner_{ts}.xlsx')
         try:
             export_smart_scan_excel(self._last_smart_results, self._last_smart_params, fpath)
             self.smart_scanner_ui.status_var.set(f"Excel сохранён: {fpath}")
@@ -1510,7 +1758,7 @@ class CreateStrategyApp:
 
     def on_show_ticker_settings(self) -> None:
         """Показать индивидуальные настройки для каждой бумаги"""
-        path = os.path.join('results', 'ticker_settings.json')
+        path = os.path.join(app_dir(), 'results', 'ticker_settings.json')
         if not os.path.exists(path):
             mb.showinfo('Индивид. настройки', 'Нет сохранённых настроек.')
             return
@@ -1592,7 +1840,7 @@ class CreateStrategyApp:
                 return
             merged = dict(current_data)
             merged.update(imported)
-            settings_path = os.path.join('results', 'ticker_settings.json')
+            settings_path = os.path.join(app_dir(), 'results', 'ticker_settings.json')
             with open(settings_path, 'w', encoding='utf-8') as f:
                 json.dump(merged, f, ensure_ascii=False, indent=2)
             mb.showinfo('Импорт',
@@ -1905,6 +2153,188 @@ class CreateStrategyApp:
         if self.diary_ui:
             self.diary_ui.refresh()
 
+    def _init_automation(self):
+        if self.scheduler.get_autostart_monitor():
+            self._on_position_start()
+
+        for name in ['auto_scan', 'monitor_positions', 'refresh_watchlist']:
+            task = self.scheduler.get_task(name)
+            if task and task.enabled and not task.is_running:
+                self.scheduler.start_task(name)
+
+    def _auto_scan_callback(self):
+        tickers = self.watchlist_storage.get_tickers()
+        if not tickers:
+            return 'Нет тикеров в вочлисте'
+
+        from screening.scanner import Scanner
+        from screening.reporter import generate_report
+        from datetime import datetime, timedelta
+        end = datetime.now().strftime('%Y-%m-%d')
+        start = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
+        params = dict(self._last_scan_params) if self._last_scan_params else {
+            'capital': 1_000_000,
+            'risk_per_trade': 0.02,
+            'atr_sl': 1.0,
+            'atr_tp': 2.0,
+            'min_hits': 5,
+            'max_hold': 20,
+            'commission': 0.0005,
+        }
+        scanner = Scanner(sector_db=self.sector_db, fetch_fn=self.get_stock_data)
+        ticker_settings_path = os.path.join(app_dir(), 'results', 'ticker_settings.json')
+        sectors = self.sector_db.get_all_sectors()
+        results = scanner.scan(
+            sectors=sectors,
+            date_from=start,
+            date_to=end,
+            backtest_params=params,
+            ticker_settings_path=ticker_settings_path,
+        )
+        new_signals = 0
+        for r in results:
+            sig = r.get('signal', {})
+            action = sig.get('action', 'NONE')
+            if action in ('BUY', 'SELL'):
+                ticker = r.get('ticker', '')
+                side = 'Лонг' if action == 'BUY' else 'Шорт'
+                price = r.get('last_price')
+                sl = sig.get('sl')
+                tp = sig.get('tp')
+                existing = self.signal_storage.get_signals(ticker=ticker, limit=5)
+                recent = [s for s in existing if s['strategy'] == 'auto_scan' and s['side'] == side]
+                if not recent:
+                    self.signal_storage.add_signal(
+                        ticker=ticker, side=side, price=price,
+                        strategy='auto_scan', sl=sl, tp=tp,
+                    )
+                    self.notification_manager.on_signal_detected(ticker, side, 'auto_scan', price)
+                    new_signals += 1
+        self._last_scan_results = results
+        try:
+            self.root.after(0, lambda: self.signal_journal_ui.update_signals(
+                self.signal_storage.get_signals(limit=200)))
+            self.root.after(0, lambda: self.signal_journal_ui.update_strategies(
+                self.signal_storage.get_strategies()))
+            self.root.after(0, self._update_top_signals)
+        except Exception:
+            pass
+        return f'{len(results)} тикеров, {new_signals} новых сигналов'
+
+    def _auto_monitor_callback(self):
+        if self.position_monitor is None:
+            from monitoring.position_monitor import PositionMonitor
+            self.position_monitor = PositionMonitor(
+                self.root, self.diary_storage, self.get_stock_data,
+                on_alerts=self._on_position_alerts,
+                on_refresh=self._on_position_data,
+            )
+        self.position_monitor.check_once()
+        open_entries = self.diary_storage.get_open_entries()
+        if open_entries:
+            for entry in open_entries:
+                if hasattr(entry, 'current_dd_pct') and entry.current_dd_pct:
+                    self.notification_manager.check_drawdown(entry.current_dd_pct)
+        return f'{len(open_entries)} открытых позиций'
+
+    def _auto_watchlist_callback(self):
+        self._on_watchlist_refresh()
+        tickers = self.watchlist_storage.get_tickers()
+        return f'{len(tickers)} тикеров обновлено'
+
+    def _on_automation_start_all(self):
+        self._on_position_start()
+
+    def _on_automation_stop_all(self):
+        self._on_position_stop()
+
+    def _update_top_signals(self):
+        signals = self.signal_storage.get_signals(limit=5)
+        self.app.update_top_signals(signals)
+
+    def _on_correlation_matrix(self):
+        tickers = self.watchlist_storage.get_tickers()
+        if len(tickers) < 2:
+            import tkinter.messagebox as mb
+            mb.showwarning('Корреляция', 'Нужно минимум 2 тикера в избранном.')
+            return
+
+        self.watchlist_ui.status_label.configure(text='Загрузка данных...')
+
+        def run():
+            from datetime import datetime, timedelta
+            end = datetime.now().strftime('%Y-%m-%d')
+            start = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+            price_data = {}
+            for t in tickers:
+                try:
+                    candles = self.get_stock_data(t, start, end)
+                    if isinstance(candles, list) and len(candles) >= 5:
+                        closes = [float(c[1]) for c in candles if c and len(c) >= 2]
+                        if len(closes) >= 5:
+                            price_data[t] = closes
+                except Exception:
+                    pass
+
+            if len(price_data) < 2:
+                self.root.after(0, lambda: self.watchlist_ui.status_label.configure(
+                    text='Недостаточно данных'))
+                return
+
+            from analytics.correlation import calc_correlation_matrix
+            result = calc_correlation_matrix(price_data)
+
+            def show():
+                from analytics.visualizations import plot_correlation_heatmap
+                fig = plot_correlation_heatmap(result)
+                if fig:
+                    import matplotlib
+                    matplotlib.use('TkAgg')
+                    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+                    win = tk.Toplevel(self.root)
+                    win.title('Корреляционная матрица')
+                    win.geometry('700x600')
+                    canvas = FigureCanvasTkAgg(fig, master=win)
+                    canvas.draw()
+                    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+                    NavigationToolbar2Tk(canvas, win)
+                    self.watchlist_ui.status_label.configure(
+                        text=f'{len(result["tickers"])} тикеров, {len(result["pairs"])} пар')
+                else:
+                    self.watchlist_ui.status_label.configure(text='Ошибка построения графика')
+
+            self.root.after(0, show)
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_alert_add(self, alert):
+        self._update_top_signals()
+
+    def _on_alert_remove(self, alert_id):
+        pass
+
+    def _on_alert_start(self):
+        self.alert_monitor.start()
+        self.alert_ui.set_monitor_running(True)
+
+    def _on_alert_stop(self):
+        self.alert_monitor.stop()
+        self.alert_ui.set_monitor_running(False)
+
+    def _on_alert_triggered(self, alert, current_price):
+        cond_label = 'выше' if alert.condition == 'above' else 'ниже'
+        self.notification_manager.notify(
+            'price_alert',
+            f'Алерт: {alert.ticker}',
+            f'Цена {current_price:.2f} {cond_label} {alert.target_price:.2f}',
+            icon='warning',
+        )
+        self.alert_ui.refresh()
+
+    def _on_alert_refresh(self, alerts):
+        self.alert_ui.refresh(alerts)
+
     def _on_review_refresh(self):
         entries = self.diary_storage.load()
         if not entries:
@@ -2112,6 +2542,287 @@ class CreateStrategyApp:
         except Exception:
             pass
 
+    def _init_new_tabs(self):
+        self._on_watchlist_refresh()
+        self.signal_journal_ui.update_strategies(self.signal_storage.get_strategies())
+        self.signal_journal_ui.update_signals(self.signal_storage.get_signals(limit=200))
+        self._update_top_signals()
+
+    def _on_watchlist_add(self, ticker):
+        self.watchlist_storage.add(ticker)
+        self._on_watchlist_refresh()
+
+    def _on_watchlist_remove(self, ticker):
+        self.watchlist_storage.remove(ticker)
+        self._on_watchlist_refresh()
+
+    def _on_watchlist_refresh(self):
+        tickers = self.watchlist_storage.get_tickers()
+        if not tickers:
+            self.watchlist_ui.update_watchlist([])
+            self.watchlist_ui.set_status('Список пуст')
+            return
+
+        self.watchlist_ui.set_status(f'Обновление {len(tickers)} тикеров...')
+
+        def task():
+            from datetime import datetime, timedelta
+            from fundamental.data import fetch_all_tqbr_fundamentals, fetch_dividends, calc_dividend_yield
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            fund_data = {}
+            try:
+                fund_data = fetch_all_tqbr_fundamentals()
+            except Exception:
+                pass
+            items = []
+            for ticker in tickers:
+                try:
+                    candles = self.get_stock_data(ticker, start_date, end_date)
+                    price = None
+                    prev_close = None
+                    volume = None
+                    change_pct = 0
+                    if isinstance(candles, list) and len(candles) >= 2:
+                        last = candles[-1]
+                        prev = candles[-2]
+                        price = float(last[1]) if last and len(last) >= 2 else None
+                        prev_close = float(prev[1]) if prev and len(prev) >= 2 else None
+                        volume = int(float(last[4])) if last and len(last) >= 5 else None
+                        change_pct = ((price / prev_close) - 1) * 100 if price and prev_close else 0
+
+                    sector = self.sector_db.get_sector(ticker) or ''
+                    fd = fund_data.get(ticker, {})
+                    market_cap = fd.get('market_cap')
+                    div_yield = None
+                    if price:
+                        try:
+                            divs = fetch_dividends(ticker)
+                            div_yield = calc_dividend_yield(divs, price) if divs else None
+                        except Exception:
+                            pass
+
+                    items.append({
+                        'ticker': ticker,
+                        'price': price,
+                        'change_pct': change_pct,
+                        'volume': volume,
+                        'sector': sector,
+                        'market_cap': market_cap,
+                        'div_yield': div_yield,
+                    })
+                except Exception:
+                    items.append({'ticker': ticker, 'price': None, 'change_pct': 0,
+                                  'volume': None, 'sector': self.sector_db.get_sector(ticker) or '',
+                                  'market_cap': None, 'div_yield': None})
+            return items
+
+        import threading
+        def run():
+            result = task()
+            try:
+                self.root.after(0, lambda: self._on_watchlist_done(result))
+            except Exception:
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_watchlist_done(self, items):
+        self.watchlist_ui.update_watchlist(items)
+        self.watchlist_ui.set_status(f'Обновлено: {len(items)} тикеров')
+
+    def _on_watchlist_select(self, ticker):
+        if ticker:
+            self.ticker_var.set(ticker)
+
+    def _on_dividend_calendar(self):
+        tickers = self.watchlist_storage.get_tickers()
+        if not tickers:
+            self.watchlist_ui.set_status('Список пуст')
+            return
+        self.watchlist_ui.set_status('Загрузка дивидендов...')
+
+        def run():
+            try:
+                from fundamental.data import fetch_dividends
+                from datetime import datetime
+                lines = ['=' * 60, '  ДИВИДЕНДНЫЙ КАЛЕНДАРЬ', '=' * 60, '']
+                today = datetime.now()
+                any_found = False
+                for ticker in sorted(tickers):
+                    try:
+                        divs = fetch_dividends(ticker)
+                    except Exception:
+                        continue
+                    if not divs:
+                        continue
+                    for d in divs:
+                        date_str = d.get('date', '') or d.get('registryclosedate', '')
+                        val = d.get('value') or d.get('amount', 0)
+                        cur = d.get('currencyid', 'RUB')
+                        if not date_str:
+                            continue
+                        try:
+                            div_date = datetime.strptime(date_str[:10], '%Y-%m-%d')
+                        except (ValueError, TypeError):
+                            continue
+                        if (div_date - today).days >= -30:
+                            any_found = True
+                            lines.append(f'  {ticker:8s}  {date_str[:10]}  {float(val):>8.2f} {cur}')
+                if not any_found:
+                    lines.append('  Нет предстоящих дивидендов')
+                lines.append('')
+                report = '\n'.join(lines)
+                self.root.after(0, lambda: self._show_popup('Дивидендный календарь', report))
+                self.root.after(0, lambda: self.watchlist_ui.set_status('Готово'))
+            except Exception as e:
+                self.root.after(0, lambda: self.watchlist_ui.set_status(f'Ошибка: {e}'))
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_sector_scan(self):
+        period = self.sector_rotation_ui.get_period()
+        self.sector_rotation_ui.set_status('Сканирование секторов...')
+
+        sector_tickers_map = {}
+        for sector in self.sector_db.get_all_sectors():
+            tickers = self.sector_db.get_tickers([sector])
+            if tickers:
+                sector_tickers_map[sector] = tickers
+
+        from market.sector_rotation import calc_sector_rotation_async
+
+        def on_done(results):
+            self.sector_rotation_ui.update_sectors(results)
+            self.sector_rotation_ui.set_status(f'Найдено секторов: {len(results)}')
+
+        calc_sector_rotation_async(on_done, sector_tickers_map, period)
+
+    def _on_sector_compare(self):
+        self.sector_rotation_ui.set_status('Загрузка фундаментал. данных...')
+        sector_map = self.sector_db.get_ticker_to_sector_map()
+
+        def run():
+            try:
+                from fundamental.data import fetch_all_tqbr_fundamentals, fetch_dividends, calc_dividend_yield
+                from fundamental.filters import compare_sector
+                all_fund = fetch_all_tqbr_fundamentals()
+                for ticker, td in all_fund.items():
+                    price = td.get('prev_price')
+                    if price:
+                        try:
+                            divs = fetch_dividends(ticker)
+                            td['div_yield'] = calc_dividend_yield(divs, price) if divs else None
+                            td['dividends'] = divs
+                            td['div_count'] = len(divs)
+                        except Exception:
+                            pass
+                for ticker in list(all_fund.keys()):
+                    if ticker in sector_map:
+                        all_fund[ticker]['sector'] = sector_map[ticker]
+                result = compare_sector(all_fund)
+                lines = ['=' * 60, '  СРАВНЕНИЕ СЕКТОРОВ (фундаментал)', '=' * 60, '']
+                for sec, d in sorted(result.items(), key=lambda x: x[1].get('avg_div_yield', 0) or 0, reverse=True):
+                    avg_pe = d.get('avg_pe')
+                    avg_pb = d.get('avg_pb')
+                    avg_div = d.get('avg_div_yield')
+                    avg_cap = d.get('avg_market_cap')
+                    n = d.get('count', 0)
+                    pe_str = f'{avg_pe:.1f}' if avg_pe else '—'
+                    pb_str = f'{avg_pb:.2f}' if avg_pb else '—'
+                    div_str = f'{avg_div:.1f}%' if avg_div else '—'
+                    if avg_cap:
+                        if avg_cap >= 1e12:
+                            cap_str = f'{avg_cap / 1e12:.1f}T'
+                        elif avg_cap >= 1e9:
+                            cap_str = f'{avg_cap / 1e9:.0f}M'
+                        else:
+                            cap_str = f'{avg_cap / 1e6:.0f}M'
+                    else:
+                        cap_str = '—'
+                    lines.append(f'  {sec:20s}  P/E:{pe_str:>7s}  P/B:{pb_str:>7s}  Див:{div_str:>7s}  Кап:{cap_str:>7s}  ({n} тик.)')
+                lines.append('')
+                report = '\n'.join(lines)
+                self.root.after(0, lambda: self.sector_rotation_ui.set_status('Готово'))
+                self.root.after(0, lambda: self._show_popup('Сравнение секторов', report))
+            except Exception as e:
+                self.root.after(0, lambda: self.sector_rotation_ui.set_status(f'Ошибка: {e}'))
+
+        import threading
+        threading.Thread(target=run, daemon=True).start()
+
+    def _show_popup(self, title, text):
+        popup = tk.Toplevel(self.root)
+        popup.title(title)
+        popup.geometry('750x500')
+        popup.grab_set()
+        txt = tk.Text(popup, wrap=tk.WORD, font=('Consolas', 10))
+        sb = ttk.Scrollbar(popup, orient='vertical', command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        txt.insert('1.0', text)
+        txt.configure(state='disabled')
+
+    def _on_pos_calc(self):
+        params = self.pos_calc_ui.get_params()
+        from analytics.position_calc import calc_position, format_position_report
+        result = calc_position(
+            entry_price=params['entry_price'],
+            sl_price=params['sl_price'],
+            capital=params['capital'],
+            risk_pct=params['risk_pct'],
+            tp_price=params['tp_price'] or None,
+        )
+        if result:
+            result['ticker'] = params['ticker']
+        report = format_position_report(result)
+        self.pos_calc_ui.show_result(report)
+
+    def _get_current_price(self, ticker):
+        try:
+            from datetime import datetime, timedelta
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            candles = self.get_stock_data(ticker, start_date, end_date)
+            if isinstance(candles, list) and len(candles) >= 1:
+                last = candles[-1]
+                if last and len(last) >= 2:
+                    return float(last[1])
+        except Exception:
+            pass
+        return None
+
+    def _on_signal_filter(self):
+        filters = self.signal_journal_ui.get_filters()
+        signals = self.signal_storage.get_signals(
+            ticker=filters['ticker'] or None,
+            strategy=filters['strategy'],
+            side=filters['side'],
+        )
+        self.signal_journal_ui.update_strategies(self.signal_storage.get_strategies())
+        self.signal_journal_ui.update_signals(signals)
+
+    def _on_signal_export(self):
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            defaultextension='.csv',
+            filetypes=[('CSV', '*.csv')],
+            title='Экспорт сигналов в CSV',
+        )
+        if not path:
+            return
+        filters = self.signal_journal_ui.get_filters()
+        count = self.signal_storage.export_csv(
+            path,
+            ticker=filters['ticker'] or None,
+            strategy=filters['strategy'],
+            side=filters['side'],
+        )
+        import tkinter.messagebox as mb
+        mb.showinfo('Экспорт', f'Экспортировано {count} сигналов в\n{path}')
+
     def on_show_analysis(self) -> None:
         """Показать окно анализа сделок с equity curve"""
         entries = self.diary_storage.load()
@@ -2198,14 +2909,24 @@ class CreateStrategyApp:
         _add_copy_menu(text_w)
 
 
-if __name__ == "__main__":
-    def main():
-        """Точка входа приложения"""
+def main():
+    """Точка входа приложения"""
+    import tempfile
+    _err = os.path.join(tempfile.gettempdir(), 'CreateStrategy_error.log')
+    try:
+        os.makedirs(os.path.join(app_dir(), 'results'), exist_ok=True)
         root = tk.Tk()
         app = CreateStrategyApp(root)
         try:
             root.mainloop()
         except KeyboardInterrupt:
             app._on_close()
+    except Exception:
+        import traceback
+        with open(_err, 'w', encoding='utf-8') as f:
+            f.write(traceback.format_exc())
+        raise
 
+
+if __name__ == "__main__":
     main()

@@ -10,6 +10,8 @@ import pandas as pd
 import requests
 import urllib3
 
+from utils import app_dir
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 REGIME_TRENDING_UP = 'TRENDING_UP'
@@ -39,10 +41,7 @@ REGIME_STRATEGY_RECOMMENDATIONS = {
     REGIME_CRISIS: [],
 }
 
-IMOEX_CACHE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'results', 'imoex_cache.json'
-)
+IMOEX_CACHE_PATH = os.path.join(app_dir(), 'results', 'imoex_cache.json')
 IMOEX_CACHE_TTL = 86400
 
 

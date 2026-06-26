@@ -5,6 +5,7 @@ from datetime import datetime
 from dataclasses import dataclass, asdict, field
 from typing import List, Optional, Callable
 
+from utils import app_dir
 
 TRIGGER_TYPES = {
     'sl_hit': 'SL сработал',
@@ -15,6 +16,8 @@ TRIGGER_TYPES = {
     'regime_change': 'Смена режима рынка',
     'drawdown_alert': 'Просадка превышена',
     'position_opened': 'Позиция открыта',
+    'signal_detected': 'Новый сигнал',
+    'price_alert': 'Ценовой алерт',
 }
 
 DEFAULT_TRIGGERS = {
@@ -26,12 +29,11 @@ DEFAULT_TRIGGERS = {
     'regime_change': True,
     'drawdown_alert': True,
     'position_opened': False,
+    'signal_detected': True,
+    'price_alert': True,
 }
 
-NOTIFY_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'results', 'notifications.json'
-)
+NOTIFY_FILE = os.path.join(app_dir(), 'results', 'notifications.json')
 
 
 @dataclass
@@ -228,6 +230,15 @@ class NotificationManager:
             'position_opened',
             f'{ticker} открыта позиция',
             f'{side} @ {entry_price:.2f}',
+            icon='info',
+        )
+
+    def on_signal_detected(self, ticker, side, strategy, price=None):
+        price_str = f' @ {price:.2f}' if price else ''
+        self.notify(
+            'signal_detected',
+            f'Сигнал: {ticker} {side}',
+            f'{strategy}{price_str}',
             icon='info',
         )
 
