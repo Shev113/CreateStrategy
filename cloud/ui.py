@@ -2,6 +2,7 @@ import logging
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import ttk, messagebox
 
 from cloud.sync import sync_manager, get_sync_files, is_encrypted_file, _load_cloud_meta
@@ -65,14 +66,22 @@ class CloudPanel:
 
         help_frame = ttk.LabelFrame(main, text='Инструкция', padding=10)
         help_frame.pack(fill='x', pady=(0, 5))
-        help_text = (
-            '1. Откройте https://oauth.yandex.ru/\n'
-            '2. Зарегистрируйте приложение (Веб-сервисы, Redirect URI: http://localhost:9876)\n'
-            '3. Дайте доступ: Яндекс.Диск (чтение/запись)\n'
-            '4. Скопируйте Client ID и Client Secret выше'
-        )
-        ttk.Label(help_frame, text=help_text, font=('Segoe UI', 9),
-                  foreground='gray', justify='left').pack(anchor='w')
+
+        row1 = ttk.Frame(help_frame)
+        row1.pack(anchor='w')
+        ttk.Label(row1, text='1. Откройте ', font=('Segoe UI', 9),
+                  foreground='gray').pack(side='left')
+        link1 = tk.Label(row1, text='https://oauth.yandex.ru/', font=('Segoe UI', 9, 'underline'),
+                         foreground='#4a90d9', cursor='hand2')
+        link1.pack(side='left')
+        link1.bind('<Button-1>', lambda e: self._open_url('https://oauth.yandex.ru/'))
+
+        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы, Redirect URI: http://localhost:9876)',
+                  font=('Segoe UI', 9), foreground='gray', justify='left').pack(anchor='w')
+        ttk.Label(help_frame, text='3. Дайте доступ: Яндекс.Диск (чтение/запись)',
+                  font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
+        ttk.Label(help_frame, text='4. Скопируйте Client ID и Client Secret выше',
+                  font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
 
         actions_frame = ttk.LabelFrame(main, text='Синхронизация', padding=10)
         actions_frame.pack(fill='x', pady=(0, 5))
@@ -122,6 +131,9 @@ class CloudPanel:
 
         self._refresh_status()
         self._refresh_files_list()
+
+    def _open_url(self, url):
+        webbrowser.open(url)
 
     def _refresh_status(self):
         token = load_token()

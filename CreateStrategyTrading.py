@@ -99,6 +99,7 @@ class CreateStrategyApp:
         self.app = None
         self.scanner_ui = None
         self.diary_ui = None
+        self.watchlist_ui = None
 
         _lbl.config(text="Загрузка секторов...")
         splash.update()
@@ -283,7 +284,6 @@ class CreateStrategyApp:
         tab_review = ttk.Frame(notebook)
         tab_analytics = ttk.Frame(notebook)
         tab_pairs = ttk.Frame(notebook)
-        tab_watchlist = ttk.Frame(notebook)
         tab_sectors = ttk.Frame(notebook)
         tab_calc = ttk.Frame(notebook)
         tab_signals = ttk.Frame(notebook)
@@ -298,7 +298,6 @@ class CreateStrategyApp:
         notebook.add(tab_review, text='Обзор торговли')
         notebook.add(tab_analytics, text='Аналитика')
         notebook.add(tab_pairs, text='Пары')
-        notebook.add(tab_watchlist, text='Избранное')
         notebook.add(tab_sectors, text='Секторы')
         notebook.add(tab_calc, text='Калькулятор')
         notebook.add(tab_signals, text='Сигналы')
@@ -397,16 +396,16 @@ class CreateStrategyApp:
         from strategy.config import get_strategy_names
         _all_strategy_ids = [s[0] for s in get_strategy_names()]
 
-        self.watchlist_ui = WatchlistUI(
-            tab_watchlist,
-            on_add=self._on_watchlist_add,
-            on_remove=self._on_watchlist_remove,
-            on_refresh=self._on_watchlist_refresh,
-            on_select=self._on_watchlist_select,
-            on_dividends=self._on_dividend_calendar,
-            on_correlation=self._on_correlation_matrix,
-            all_tickers=_all_tickers,
-        )
+        self._watchlist_ui_class = WatchlistUI
+        self._watchlist_callbacks = {
+            'on_add': self._on_watchlist_add,
+            'on_remove': self._on_watchlist_remove,
+            'on_refresh': self._on_watchlist_refresh,
+            'on_select': self._on_watchlist_select,
+            'on_dividends': self._on_dividend_calendar,
+            'on_correlation': self._on_correlation_matrix,
+            'all_tickers': _all_tickers,
+        }
 
         self.sector_rotation_ui = SectorRotationUI(
             tab_sectors,
@@ -473,6 +472,9 @@ class CreateStrategyApp:
             scheduler=self.scheduler,
             on_start_all=self._on_automation_start_all,
             on_stop_all=self._on_automation_stop_all,
+            watchlist_ui_class=self._watchlist_ui_class,
+            watchlist_callbacks=self._watchlist_callbacks,
+            main_app=self,
         )
 
         from intraday.strategies import SOLABUTO_REGISTRY
@@ -782,7 +784,7 @@ class CreateStrategyApp:
             f"Загружено {total} эмитентов (+{added} из MOEX индексов)\n")
 
         updated_tickers = self.sector_db.get_all_tickers()
-        if hasattr(self, 'watchlist_ui') and hasattr(self.watchlist_ui, 'ticker_combo'):
+        if hasattr(self, 'watchlist_ui') and self.watchlist_ui is not None and hasattr(self.watchlist_ui, 'ticker_combo'):
             self.watchlist_ui._all_tickers = updated_tickers
             self.watchlist_ui.ticker_combo.configure(values=updated_tickers)
         if hasattr(self, 'pos_calc_ui') and hasattr(self.pos_calc_ui, 'ticker_combo'):
@@ -2352,7 +2354,7 @@ class CreateStrategyApp:
             mb.showwarning('Корреляция', 'Нужно минимум 2 тикера в избранном.')
             return
 
-        self.watchlist_ui.status_label.configure(text='Загрузка данных...')
+        self._watchlist_set_status('Загрузка данных...')
 
         def run():
             from datetime import datetime, timedelta
@@ -2380,8 +2382,7 @@ class CreateStrategyApp:
                         price_data[t] = closes
 
             if len(price_data) < 2:
-                self.root.after(0, lambda: self.watchlist_ui.status_label.configure(
-                    text='Недостаточно данных'))
+                self.root.after(0, lambda: self._watchlist_set_status('Недостаточно данных'))
                 return
 
             from analytics.correlation import calc_correlation_matrix
@@ -2401,10 +2402,10 @@ class CreateStrategyApp:
                     canvas.draw()
                     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
                     NavigationToolbar2Tk(canvas, win)
-                    self.watchlist_ui.status_label.configure(
-                        text=f'{len(result["tickers"])} тикеров, {len(result["pairs"])} пар')
+                    self._watchlist_set_status(
+                        f'{len(result["tickers"])} тикеров, {len(result["pairs"])} пар')
                 else:
-                    self.watchlist_ui.status_label.configure(text='Ошибка построения графика')
+                    self._watchlist_set_status('Ошибка построения графика')
 
             self.root.after(0, show)
 
@@ -2719,6 +2720,13 @@ class CreateStrategyApp:
         self.watchlist_storage.add(ticker)
         self._on_watchlist_refresh()
 
+    def _watchlist_set_status(self, text):
+        if hasattr(self, 'watchlist_ui') and self.watchlist_ui is not None:
+            try:
+                self.watchlist_ui.set_status(text)
+            except Exception:
+                pass
+
     def _on_watchlist_remove(self, ticker):
         self.watchlist_storage.remove(ticker)
         self._on_watchlist_refresh()
@@ -2726,11 +2734,12 @@ class CreateStrategyApp:
     def _on_watchlist_refresh(self):
         tickers = self.watchlist_storage.get_tickers()
         if not tickers:
-            self.watchlist_ui.update_watchlist([])
-            self.watchlist_ui.set_status('Список пуст')
+            if hasattr(self, 'watchlist_ui') and self.watchlist_ui is not None:
+                self.watchlist_ui.update_watchlist([])
+                self.watchlist_ui.set_status('Список пуст')
             return
 
-        self.watchlist_ui.set_status(f'Обновление {len(tickers)} тикеров...')
+        self._watchlist_set_status(f'Обновление {len(tickers)} тикеров...')
 
         def task():
             from datetime import datetime, timedelta
@@ -2795,8 +2804,9 @@ class CreateStrategyApp:
         threading.Thread(target=run, daemon=True).start()
 
     def _on_watchlist_done(self, items):
-        self.watchlist_ui.update_watchlist(items)
-        self.watchlist_ui.set_status(f'Обновлено: {len(items)} тикеров')
+        if hasattr(self, 'watchlist_ui') and self.watchlist_ui is not None:
+            self.watchlist_ui.update_watchlist(items)
+            self.watchlist_ui.set_status(f'Обновлено: {len(items)} тикеров')
 
     def _on_watchlist_select(self, ticker):
         if ticker:
@@ -2805,9 +2815,9 @@ class CreateStrategyApp:
     def _on_dividend_calendar(self):
         tickers = self.watchlist_storage.get_tickers()
         if not tickers:
-            self.watchlist_ui.set_status('Список пуст')
+            self._watchlist_set_status('Список пуст')
             return
-        self.watchlist_ui.set_status('Загрузка дивидендов...')
+        self._watchlist_set_status('Загрузка дивидендов...')
 
         def run():
             try:
@@ -2841,9 +2851,9 @@ class CreateStrategyApp:
                 lines.append('')
                 report = '\n'.join(lines)
                 self.root.after(0, lambda: self._show_popup('Дивидендный календарь', report))
-                self.root.after(0, lambda: self.watchlist_ui.set_status('Готово'))
+                self.root.after(0, lambda: self._watchlist_set_status('Готово'))
             except Exception as e:
-                self.root.after(0, lambda: self.watchlist_ui.set_status(f'Ошибка: {e}'))
+                self.root.after(0, lambda: self._watchlist_set_status(f'Ошибка: {e}'))
 
         import threading
         threading.Thread(target=run, daemon=True).start()
