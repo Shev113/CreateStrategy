@@ -37,7 +37,8 @@ from intraday.visual import IntradayUI
 from automation.scheduler import AutomationScheduler
 from automation.panel import AutomationPanel
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir, tree_batch_insert
-from core.moex_cache import moex_cache, cached_get_tickers, cached_get_candles
+from core.moex_cache import moex_cache, cached_get_tickers
+from core.session_store import get_cached_range, save_session, merge_candles
 
 # Настройка логирования
 logging.basicConfig(
@@ -154,11 +155,53 @@ class CreateStrategyApp:
         )
 
     def get_stock_data(self, symbol: str, start_date: str, end_date: str) -> list | str:
-        """Получение исторических данных по акции (с кэшем)"""
-        return cached_get_candles(symbol, start_date, end_date,
-                                   lambda: self._fetch_stock_data(symbol, start_date, end_date))
+        """Получение исторических данных по акции (с инкрементальным кэшем)"""
+        cached = get_cached_range(symbol, 24, start_date, end_date)
+        if cached is not None:
+            return cached
 
-    def _fetch_stock_data(self, symbol: str, start_date: str, end_date: str) -> list | str:
+        from core.session_store import load_session
+        session = load_session(symbol, 24)
+        if session is not None:
+            s_last = session.get('last_date', '')
+            s_start = session.get('start_date', '')
+            try:
+                last_dt = datetime.strptime(s_last, '%Y-%m-%d')
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                c_start_dt = datetime.strptime(s_start, '%Y-%m-%d') if s_start else None
+
+                need_tail = last_dt < end_dt
+                need_head = c_start_dt and c_start_dt > start_dt
+
+                if need_tail or need_head:
+                    result_candles = list(session['candles'])
+
+                    if need_tail:
+                        tail_start = max(s_last, start_date)
+                        tail = self._fetch_stock_data_raw(symbol, tail_start, end_date)
+                        if isinstance(tail, list) and tail:
+                            result_candles = merge_candles(result_candles, tail)
+
+                    if need_head:
+                        head_end = min(s_start, end_date)
+                        head = self._fetch_stock_data_raw(symbol, start_date, head_end)
+                        if isinstance(head, list) and head:
+                            result_candles = merge_candles(head, result_candles)
+
+                    save_session(symbol, 24, result_candles, start_date=start_date)
+                    return result_candles
+
+                return result_candles
+            except ValueError:
+                pass
+
+        result = self._fetch_stock_data_raw(symbol, start_date, end_date)
+        if isinstance(result, list) and result:
+            save_session(symbol, 24, result, start_date=start_date)
+        return result
+
+    def _fetch_stock_data_raw(self, symbol: str, start_date: str, end_date: str) -> list | str:
         """Получение исторических данных по акции (сырой HTTP-запрос)"""
         try:
             url = f"https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/{symbol}/candles.json"

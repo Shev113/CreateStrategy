@@ -9,6 +9,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from intraday.strategies import SOLABUTO_REGISTRY, get_solabuto_defaults
 from intraday.engine import IntradayEngine, H1_BARS_PER_YEAR
+from core.session_store import get_cached_range, save_session, merge_candles, load_session
 
 H1_INTERVAL = 60
 H1_DAYS_LIMIT = 30
@@ -17,6 +18,52 @@ MIN_CANDLES = 30
 
 
 def _fetch_h1_data(ticker, start, end):
+    cached = get_cached_range(ticker, 60, start, end)
+    if cached is not None:
+        return cached
+
+    session = load_session(ticker, 60)
+    if session is not None:
+        s_last = session.get('last_date', '')
+        s_start = session.get('start_date', '')
+        try:
+            last_dt = datetime.strptime(s_last, '%Y-%m-%d')
+            end_dt = datetime.strptime(end, '%Y-%m-%d')
+            start_dt = datetime.strptime(start, '%Y-%m-%d')
+            c_start_dt = datetime.strptime(s_start, '%Y-%m-%d') if s_start else None
+
+            need_tail = last_dt < end_dt
+            need_head = c_start_dt and c_start_dt > start_dt
+
+            if need_tail or need_head:
+                result_candles = list(session['candles'])
+
+                if need_tail:
+                    tail_start = max(s_last, start)
+                    tail = _fetch_h1_raw(ticker, tail_start, end)
+                    if tail:
+                        result_candles = merge_candles(result_candles, tail)
+
+                if need_head:
+                    head_end = min(s_start, end)
+                    head = _fetch_h1_raw(ticker, start, head_end)
+                    if head:
+                        result_candles = merge_candles(head, result_candles)
+
+                save_session(ticker, 60, result_candles, start_date=start)
+                return result_candles
+
+            return result_candles
+        except ValueError:
+            pass
+
+    result = _fetch_h1_raw(ticker, start, end)
+    if result:
+        save_session(ticker, 60, result, start_date=start)
+    return result
+
+
+def _fetch_h1_raw(ticker, start, end):
     url = (f'https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR'
            f'/securities/{ticker}/candles.json')
     start_dt = datetime.strptime(start, '%Y-%m-%d')

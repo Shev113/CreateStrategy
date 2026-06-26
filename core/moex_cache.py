@@ -11,7 +11,6 @@ _CACHE_DIR = os.path.join(app_dir(), 'results')
 _CACHE_FILE = os.path.join(_CACHE_DIR, 'moex_cache.json')
 
 _TTL_TICKERS = 4 * 3600
-_TTL_CANDLES = 15 * 60
 
 
 class MoexCache:
@@ -88,15 +87,4 @@ def cached_get_tickers(fetch_fn):
     if result:
         moex_cache.set(key, result, _TTL_TICKERS)
         moex_cache.flush()
-    return result
-
-
-def cached_get_candles(ticker: str, start: str, end: str, fetch_fn):
-    key = f'candles:{ticker}:{start}:{end}'
-    result = moex_cache.get(key)
-    if result is not None:
-        return result
-    result = fetch_fn()
-    if result and not isinstance(result, str):
-        moex_cache.set(key, result, _TTL_CANDLES)
     return result
