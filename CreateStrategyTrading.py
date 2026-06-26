@@ -36,6 +36,7 @@ from diary.journal import DiaryStorage, DiaryEntry, calc_position_qty, calc_posi
 from intraday.visual import IntradayUI
 from automation.scheduler import AutomationScheduler
 from automation.panel import AutomationPanel
+from cloud.ui import CloudPanel
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir, tree_batch_insert
 from core.moex_cache import moex_cache, cached_get_tickers
 from core.session_store import get_cached_range, save_session, merge_candles
@@ -285,6 +286,7 @@ class CreateStrategyApp:
         tab_news = ttk.Frame(notebook)
         tab_app_guide = ttk.Frame(notebook)
         tab_automation = ttk.Frame(notebook)
+        tab_cloud = ttk.Frame(notebook)
         notebook.add(tab_analysis, text='Анализ')
         notebook.add(tab_scanner, text='Сканер')
         notebook.add(tab_smart_scanner, text='Умный сканер')
@@ -300,6 +302,7 @@ class CreateStrategyApp:
         notebook.add(tab_alerts, text='Алерты')
         notebook.add(tab_news, text='AI Новости')
         notebook.add(tab_automation, text='Автоматизация')
+        notebook.add(tab_cloud, text='Облако')
         notebook.add(tab_app_guide, text='Описание')
 
         tab_guide = ttk.Frame(notebook)
@@ -468,6 +471,8 @@ class CreateStrategyApp:
             on_start_all=self._on_automation_start_all,
             on_stop_all=self._on_automation_stop_all,
         )
+
+        self.cloud_panel = CloudPanel(tab_cloud, self.root)
 
         from intraday.strategies import SOLABUTO_REGISTRY
         intraday_tickers = self.sector_db.get_tickers(self.sector_db.get_all_sectors())
@@ -809,6 +814,12 @@ class CreateStrategyApp:
         try:
             moex_cache.cleanup()
             moex_cache.flush()
+        except Exception:
+            pass
+        try:
+            from cloud.sync import sync_manager
+            if sync_manager.auto_sync_on_close and sync_manager.is_connected():
+                sync_manager.upload_all()
         except Exception:
             pass
         try:
