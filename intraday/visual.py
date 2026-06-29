@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox as mb
 import threading
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from utils import tree_batch_insert
 import urllib3
@@ -641,7 +641,7 @@ class IntradaySmartScannerUI:
         ttk.Label(date_frame, text='От:').pack(side=tk.LEFT, padx=2)
         self.date_from = ttk.Entry(date_frame, width=12)
         self.date_from.pack(side=tk.LEFT, padx=2)
-        self.date_from.insert(0, '2015-01-01')
+        self.date_from.insert(0, (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
 
         ttk.Label(date_frame, text='До:').pack(side=tk.LEFT, padx=2)
         self.date_to = ttk.Entry(date_frame, width=12)

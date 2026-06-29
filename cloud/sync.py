@@ -119,6 +119,7 @@ class SyncManager:
         self._auto_sync_on_close = False
         self._client_id = ''
         self._client_secret = ''
+        self._redirect_uri = 'http://localhost:9876'
         self._load_config()
 
     def _config_path(self) -> str:
@@ -133,6 +134,7 @@ class SyncManager:
             self._auto_sync_on_close = cfg.get('auto_sync_on_close', False)
             self._client_id = cfg.get('client_id', '')
             self._client_secret = cfg.get('client_secret', '')
+            self._redirect_uri = cfg.get('redirect_uri', 'http://localhost:9876')
             if self._client_id and self._client_secret:
                 set_oauth_app(self._client_id, self._client_secret)
         except Exception:
@@ -146,6 +148,7 @@ class SyncManager:
                     'auto_sync_on_close': self._auto_sync_on_close,
                     'client_id': self._client_id,
                     'client_secret': self._client_secret,
+                    'redirect_uri': self._redirect_uri,
                 }, f, ensure_ascii=False, indent=2)
             if self._client_id and self._client_secret:
                 set_oauth_app(self._client_id, self._client_secret)
@@ -183,6 +186,14 @@ class SyncManager:
     @client_secret.setter
     def client_secret(self, value: str):
         self._client_secret = value
+
+    @property
+    def redirect_uri(self) -> str:
+        return self._redirect_uri
+
+    @redirect_uri.setter
+    def redirect_uri(self, value: str):
+        self._redirect_uri = value
 
     def is_connected(self) -> bool:
         return get_valid_token() is not None

@@ -50,7 +50,7 @@ def fetch_news_body(news_id: int) -> Optional[str]:
             item = dict(zip(columns, rows[0]))
             return html.unescape(item.get('body', ''))
     except Exception as e:
-        logging.debug(f'News body fetch error for {news_id}: {e}')
+        logging.warning(f'News body fetch error for {news_id}: {e}')
     return None
 
 

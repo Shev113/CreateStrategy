@@ -102,7 +102,9 @@ class StockAppVisual:
         self._ticker_status_label = ttk.Label(ticker_frame, textvariable=self._ticker_status_var, foreground='gray')
         self._ticker_status_label.pack(side=tk.LEFT, padx=(8, 0))
         self._update_star_button()
-        self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: (self._restore_ticker_list(), self._load_ticker_settings(), self._update_star_button()))
+        self._on_select = on_select
+        self._select_after_id = None
+        self.stock_combobox.bind('<<ComboboxSelected>>', lambda e: (self._restore_ticker_list(), self._load_ticker_settings(), self._update_star_button(), self._schedule_auto_fetch()))
 
         self._autocomplete_hit = False
         self.stock_combobox.bind('<KeyRelease>', self._on_ticker_keyrelease)
@@ -319,6 +321,16 @@ class StockAppVisual:
 
     def _restore_ticker_list(self):
         self.stock_combobox['values'] = self._all_tickers
+
+    def _schedule_auto_fetch(self):
+        if self._select_after_id:
+            self.root.after_cancel(self._select_after_id)
+        self._select_after_id = self.root.after(500, self._do_auto_fetch)
+
+    def _do_auto_fetch(self):
+        self._select_after_id = None
+        if self._on_select:
+            self._on_select()
 
     def _is_favorite(self, ticker):
         return ticker in self._favorites

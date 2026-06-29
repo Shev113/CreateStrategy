@@ -26,7 +26,7 @@ def _parse_date(candle) -> Optional[str]:
         if len(candle) > idx:
             val = candle[idx]
             if isinstance(val, str) and len(val) >= 10:
-                return val[:10]
+                return val
     return None
 
 
@@ -46,6 +46,10 @@ def load_session(ticker: str, tf: int) -> Optional[dict]:
         last_date = _parse_date(candles[-1])
         if not last_date:
             return None
+        if first_date:
+            first_date = first_date[:10]
+        if last_date:
+            last_date = last_date[:10]
         return {
             'ticker': ticker,
             'tf': tf,
@@ -62,8 +66,12 @@ def save_session(ticker: str, tf: int, candles: list, start_date: str = ''):
     if not candles:
         return
     _ensure_dir()
-    first_date = _parse_date(candles[0]) or start_date
-    last_date = _parse_date(candles[-1]) or ''
+    first_date = _parse_date(candles[0])
+    last_date = _parse_date(candles[-1])
+    if first_date:
+        first_date = first_date[:10]
+    if last_date:
+        last_date = last_date[:10]
     data = {
         'ticker': ticker,
         'tf': tf,
@@ -86,18 +94,18 @@ def merge_candles(existing: list, delta: list) -> list:
     if not delta:
         return existing
 
-    existing_dates = set()
+    existing_keys = set()
     for c in existing:
         d = _parse_date(c)
         if d:
-            existing_dates.add(d)
+            existing_keys.add(d)
 
     merged = list(existing)
     for c in delta:
         d = _parse_date(c)
-        if d and d not in existing_dates:
+        if d and d not in existing_keys:
             merged.append(c)
-            existing_dates.add(d)
+            existing_keys.add(d)
 
     def _sort_key(c):
         d = _parse_date(c)
@@ -166,7 +174,11 @@ def get_cached_range(ticker: str, tf: int, start: str, end: str) -> Optional[lis
         for c in session['candles']:
             d = _parse_date(c)
             if d:
-                dt = datetime.strptime(d, '%Y-%m-%d')
+                dt_str = d[:10]
+                try:
+                    dt = datetime.strptime(dt_str, '%Y-%m-%d')
+                except ValueError:
+                    continue
                 if req_start <= dt <= req_end:
                     filtered.append(c)
         return filtered if filtered else None

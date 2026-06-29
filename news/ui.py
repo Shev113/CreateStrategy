@@ -103,7 +103,7 @@ class NewsUI:
         if self._on_analyze:
             self._on_analyze()
 
-    def _show_settings(self):
+    def _show_settings(self, on_saved=None):
         if self._on_settings:
             self._on_settings()
             return
@@ -172,6 +172,8 @@ class NewsUI:
                 }
                 save_ai_config(cfg)
                 info_label.configure(text='Сохранено!', foreground='green')
+                if on_saved:
+                    on_saved()
                 win.after(1500, win.destroy)
             except Exception as e:
                 info_label.configure(text=f'Ошибка: {e}', foreground='red')

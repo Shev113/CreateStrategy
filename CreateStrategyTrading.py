@@ -460,6 +460,9 @@ class CreateStrategyApp:
             on_settings=self._on_news_settings,
             all_tickers=_all_tickers,
         )
+        cached = self.news_analyzer.get_cached()
+        if cached:
+            self.news_ui.update_news(cached)
 
         self.scheduler = AutomationScheduler(self.root)
         self.scheduler.register_task('auto_scan', self._auto_scan_callback)
@@ -2441,11 +2444,7 @@ class CreateStrategyApp:
 
     def _on_news_refresh(self):
         self.news_ui.status_label.configure(text='Загрузка новостей...')
-        cached = self.news_analyzer.get_cached()
-        if cached:
-            self.news_ui.update_news(cached)
-        else:
-            self._on_news_analyze()
+        self._on_news_analyze()
 
     def _on_news_analyze(self):
         self.news_ui.status_label.configure(text='Анализ новостей...')
@@ -2475,9 +2474,8 @@ class CreateStrategyApp:
     def _on_news_settings(self):
         old = self.news_ui._on_settings
         self.news_ui._on_settings = None
-        self.news_ui._show_settings()
+        self.news_ui._show_settings(on_saved=self.news_analyzer._rebuild_provider)
         self.news_ui._on_settings = old
-        self.news_analyzer._rebuild_provider()
 
     def _auto_news_callback(self):
         from news.provider import load_ai_config

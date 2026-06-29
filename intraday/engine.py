@@ -56,18 +56,18 @@ class IntradayEngine:
         df = None
         for attempt in range(2):
             try:
-                df = candles_to_df(candles_list)
+                df = candles_to_df(valid)
                 break
             except Exception:
                 fixed = []
-                for c in candles_list:
+                for c in valid:
                     if c is None or len(c) < 4:
                         continue
                     r = list(c)
                     while len(r) < 8:
                         r.append('')
                     fixed.append(r)
-                candles_list = fixed
+                valid = fixed
                 continue
         if df is None or len(df) < self.atr_period + 5:
             return [], calc_h1_metrics([], self.initial_capital, self.capital)
@@ -84,13 +84,13 @@ class IntradayEngine:
         pending_signal = None
 
         for i in range(self.atr_period, len(df)):
-            candle = candles_list[i - 1]
+            candle = valid[i - 1]
             if candle is not None and len(candle) >= 4:
                 price_counter[round_to_tolerance(float(candle[1]), tolerance)] += 1
                 price_counter[round_to_tolerance(float(candle[2]), tolerance)] += 1
                 price_counter[round_to_tolerance(float(candle[3]), tolerance)] += 1
 
-            current_candle = candles_list[i]
+            current_candle = valid[i]
             levels = [p for p, c in price_counter.items() if c >= 5]
             self.last_levels = levels
             atr = atr_series.iloc[i]
@@ -174,7 +174,7 @@ class IntradayEngine:
                     position = None
 
             if position is None and current_candle is not None and len(current_candle) >= 4 and atr > 0:
-                signal = self._get_signal(candles_list, i, levels, atr)
+                signal = self._get_signal(valid, i, levels, atr)
                 if signal:
                     pending_signal = signal
 

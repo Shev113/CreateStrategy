@@ -128,16 +128,19 @@ class _OAuthHandler(BaseHTTPRequestHandler):
         pass
 
 
-def exchange_code_for_token(code: str) -> dict | None:
+def exchange_code_for_token(code: str, redirect_uri: str = None) -> dict | None:
     if not _client_id or not _client_secret:
         logging.error('OAuth client_id/client_secret not set')
         return None
+    if not redirect_uri:
+        redirect_uri = _DEFAULT_REDIRECT_URI
     try:
         resp = requests.post(_TOKEN_URL, data={
             'grant_type': 'authorization_code',
             'code': code,
             'client_id': _client_id,
             'client_secret': _client_secret,
+            'redirect_uri': redirect_uri,
         }, timeout=15)
         resp.raise_for_status()
         data = resp.json()
@@ -148,13 +151,14 @@ def exchange_code_for_token(code: str) -> dict | None:
         return None
 
 
-def start_oauth_flow(callback=None) -> bool:
+def start_oauth_flow(callback=None, redirect_uri: str = None) -> bool:
     if not _client_id:
         logging.error('OAuth client_id not set')
         return False
 
     _OAuthHandler.auth_code = None
-    redirect_uri = _DEFAULT_REDIRECT_URI
+    if not redirect_uri:
+        redirect_uri = _DEFAULT_REDIRECT_URI
     auth_url = (
         f'{_OAUTH_URL}?response_type=code'
         f'&client_id={_client_id}'
@@ -162,8 +166,17 @@ def start_oauth_flow(callback=None) -> bool:
     )
 
     server = None
+    parsed_port = _DEFAULT_REDIRECT_PORT
     try:
-        server = HTTPServer(('127.0.0.1', _DEFAULT_REDIRECT_PORT), _OAuthHandler)
+        from urllib.parse import urlparse
+        parsed = urlparse(redirect_uri)
+        if parsed.port:
+            parsed_port = parsed.port
+    except Exception:
+        pass
+
+    try:
+        server = HTTPServer(('127.0.0.1', parsed_port), _OAuthHandler)
         server.timeout = 120
     except OSError:
         webbrowser.open(auth_url)
@@ -178,7 +191,7 @@ def start_oauth_flow(callback=None) -> bool:
     if not code:
         return False
 
-    token_data = exchange_code_for_token(code)
+    token_data = exchange_code_for_token(code, redirect_uri=redirect_uri)
     if token_data and callback:
         callback(token_data)
 

@@ -48,19 +48,24 @@ class CloudPanel:
         ttk.Entry(settings_frame, textvariable=self._client_secret_var, width=45,
                   show='*').grid(row=1, column=1, sticky='ew', padx=(5, 0), pady=2)
 
-        ttk.Label(settings_frame, text='Пароль синка:').grid(row=2, column=0, sticky='w', pady=2)
+        ttk.Label(settings_frame, text='Redirect URI:').grid(row=2, column=0, sticky='w', pady=2)
+        self._redirect_uri_var = tk.StringVar(value=sync_manager.redirect_uri)
+        ttk.Entry(settings_frame, textvariable=self._redirect_uri_var, width=45).grid(
+            row=2, column=1, sticky='ew', padx=(5, 0), pady=2)
+
+        ttk.Label(settings_frame, text='Пароль шифрования:').grid(row=3, column=0, sticky='w', pady=2)
         self._password_var = tk.StringVar(value=sync_manager.sync_password)
         ttk.Entry(settings_frame, textvariable=self._password_var, width=45,
-                  show='*').grid(row=2, column=1, sticky='ew', padx=(5, 0), pady=2)
+                  show='*').grid(row=3, column=1, sticky='ew', padx=(5, 0), pady=2)
 
         self._auto_sync_var = tk.BooleanVar(value=sync_manager.auto_sync_on_close)
         ttk.Checkbutton(settings_frame, text='Автосинк при закрытии приложения',
                          variable=self._auto_sync_var).grid(
-            row=3, column=0, columnspan=2, sticky='w', pady=(5, 0))
+            row=4, column=0, columnspan=2, sticky='w', pady=(5, 0))
 
         ttk.Button(settings_frame, text='Сохранить настройки',
                     command=self._save_settings).grid(
-            row=4, column=0, columnspan=2, pady=(10, 0))
+            row=5, column=0, columnspan=2, pady=(10, 0))
 
         settings_frame.columnconfigure(1, weight=1)
 
@@ -76,7 +81,7 @@ class CloudPanel:
         link1.pack(side='left')
         link1.bind('<Button-1>', lambda e: self._open_url('https://oauth.yandex.ru/'))
 
-        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы, Redirect URI: http://localhost:9876)',
+        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы), укажите Redirect URI как в настройках выше',
                   font=('Segoe UI', 9), foreground='gray', justify='left').pack(anchor='w')
         ttk.Label(help_frame, text='3. Дайте доступ: Яндекс.Диск (чтение/запись)',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
@@ -188,7 +193,7 @@ class CloudPanel:
 
         def do_connect():
             try:
-                result = start_oauth_flow()
+                result = start_oauth_flow(redirect_uri=self._redirect_uri_var.get().strip())
                 self.root.after(0, self._on_connect_done, result)
             except Exception as e:
                 logging.error(f'OAuth error: {e}')
@@ -220,6 +225,7 @@ class CloudPanel:
     def _save_settings(self):
         sync_manager.client_id = self._client_id_var.get().strip()
         sync_manager.client_secret = self._client_secret_var.get().strip()
+        sync_manager.redirect_uri = self._redirect_uri_var.get().strip()
         sync_manager.sync_password = self._password_var.get()
         sync_manager.auto_sync_on_close = self._auto_sync_var.get()
         sync_manager.save_config()
