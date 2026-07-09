@@ -92,13 +92,9 @@ def _calc_h1_composite(metrics, min_trades=5):
     ret = metrics.get('total_return', 0)
     if trades < min_trades:
         return -1.0
-    if sharpe <= 0 and ret <= 0:
+    if sharpe <= 0 or ret <= 0:
         return -1.0
-    if sharpe > 0 and ret > 0:
-        return sharpe * (ret / 100.0) * math.log2(max(trades, 2))
-    if sharpe > 0:
-        return sharpe * 0.1
-    return ret * 0.01
+    return sharpe * (ret / 100.0) * math.log2(max(trades, 2))
 
 
 def _build_h1_signal(trades, data):
