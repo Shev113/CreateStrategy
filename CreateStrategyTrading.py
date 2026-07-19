@@ -1653,7 +1653,17 @@ class CreateStrategyApp:
                     progress_fn=lambda c, t, tick, sid_name: self.smart_scanner_ui.update_progress(c, t, tick, sid_name)
                 )
                 self._last_smart_results = results
+                skipped = getattr(scanner, 'skipped_count', 0)
+                tested = len(results)
+                if skipped > 0 and tested == 0:
+                    msg = f"Сканирование завершено. Все тикеры пропущены ({skipped}). Проверьте подключение к MOEX."
+                elif skipped > 0:
+                    msg = f"Готово. Найдено: {tested}, пропущено: {skipped}"
+                else:
+                    msg = None
                 self.root.after(0, lambda: self.smart_scanner_ui.show_results(results))
+                if msg:
+                    self.root.after(0, lambda: self.smart_scanner_ui.status_var.set(msg))
             except Exception as e:
                 self.root.after(0, lambda: self.smart_scanner_ui.status_var.set(f"Ошибка: {str(e)}"))
             finally:

@@ -11,10 +11,10 @@ def _build_moex_session() -> requests.Session:
     """Сессия requests с Retry для MOEX ISS API."""
     s = requests.Session()
     retry = Retry(
-        total=5,
-        connect=5,
-        read=3,
-        backoff_factor=0.5,
+        total=2,
+        connect=2,
+        read=2,
+        backoff_factor=0.3,
         status_forcelist=(500, 502, 503, 504),
         allowed_methods=('GET', 'HEAD'),
     )

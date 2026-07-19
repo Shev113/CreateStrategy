@@ -1,4 +1,5 @@
 # smart_scanner.py
+import logging
 import math
 from copy import deepcopy
 
@@ -67,6 +68,7 @@ class SmartScanner:
         strategy_names = {k: v['name'] for k, v in STRATEGY_REGISTRY.items()}
 
         total_processed = 0
+        skipped_count = 0
         total_tickers = len(all_tickers)
         total_steps = total_tickers * len(strategy_ids)
 
@@ -79,13 +81,25 @@ class SmartScanner:
                 try:
                     stock_data = self.fetch_fn(ticker, date_from, date_to)
                     if isinstance(stock_data, str) or not isinstance(stock_data, list):
+                        logging.warning(f'SmartScanner: skip {ticker} — fetch returned {type(stock_data).__name__}: {stock_data if isinstance(stock_data, str) else "not list"}')
+                        skipped_count += 1
                         total_processed += 1
+                        if progress_fn:
+                            progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
                         continue
                     if len(stock_data) < 30:
+                        logging.warning(f'SmartScanner: skip {ticker} — only {len(stock_data)} candles (< 30)')
+                        skipped_count += 1
                         total_processed += 1
+                        if progress_fn:
+                            progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
                         continue
-                except Exception:
+                except Exception as e:
+                    logging.warning(f'SmartScanner: skip {ticker} — fetch exception: {e}')
+                    skipped_count += 1
                     total_processed += 1
+                    if progress_fn:
+                        progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
                     continue
 
                 strategies_result = {}
@@ -113,7 +127,8 @@ class SmartScanner:
 
                     try:
                         trades, metrics = engine.run(stock_data)
-                    except Exception:
+                    except Exception as e:
+                        logging.warning(f'SmartScanner: {ticker} strategy={sid} engine.run() failed: {e}')
                         metrics = {}
                         trades = []
 
@@ -142,7 +157,9 @@ class SmartScanner:
                 self.results.append(entry)
                 total_processed += 1
 
+        logging.info(f'SmartScanner: done. tested={len(self.results)} skipped={skipped_count} of {total_tickers}')
         self.results.sort(key=lambda r: r.get('best_score', -1), reverse=True)
+        self.skipped_count = skipped_count
         return self.results
 
     def _best_info(self, strategies, best_id):

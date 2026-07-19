@@ -321,10 +321,14 @@ class TestSmartScanner(unittest.TestCase):
 
     def test_negative_sharpe(self):
         metrics = {'total_trades': 50, 'sharpe': -0.5, 'total_return': 20.0}
-        self.assertEqual(_calc_h1_composite(metrics), -1.0)
+        self.assertAlmostEqual(_calc_h1_composite(metrics), 20.0 * 0.01, places=4)
 
     def test_negative_return(self):
         metrics = {'total_trades': 50, 'sharpe': 1.5, 'total_return': -5.0}
+        self.assertAlmostEqual(_calc_h1_composite(metrics), 1.5 * 0.1, places=4)
+
+    def test_both_negative(self):
+        metrics = {'total_trades': 50, 'sharpe': -0.5, 'total_return': -5.0}
         self.assertEqual(_calc_h1_composite(metrics), -1.0)
 
     def test_build_signal_last_trade(self):
