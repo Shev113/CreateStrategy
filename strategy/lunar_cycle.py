@@ -29,7 +29,7 @@ def check_lunar_cycle(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0,
     parts = date_str.split('-')
     if len(parts) != 3:
         return None
-    year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+    year, month, day = int(parts[0]), int(parts[1]), int(parts[2].split()[0])
     dn = _day_number(year, month, day) - lc_offset - lc_timezone / 24.0 + lc_phase_shift
     phase = _lunar_phase(dn)
     proximity_threshold = level_proximity * atr

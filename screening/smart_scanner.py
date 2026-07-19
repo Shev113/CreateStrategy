@@ -15,9 +15,15 @@ def calc_composite(metrics, min_trades=30):
     trades = metrics.get('total_trades', 0)
     sharpe = metrics.get('sharpe', 0)
     ret = metrics.get('total_return', 0)
-    if trades < min_trades or sharpe <= 0 or ret <= 0:
+    if trades < min_trades:
         return -1.0
-    return sharpe * (ret / 100.0) * math.log2(trades)
+    if sharpe <= 0 and ret <= 0:
+        return -1.0
+    if sharpe > 0 and ret > 0:
+        return sharpe * (ret / 100.0) * math.log2(trades)
+    if sharpe > 0:
+        return sharpe * 0.1
+    return ret * 0.01
 
 
 def _calc_signal(trades, stock_data, params):

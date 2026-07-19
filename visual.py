@@ -1275,7 +1275,7 @@ class SmartScannerUI:
             {'key': 'min_hits', 'label': 'Мин.повт.', 'default': '5', 'width': 6},
             {'key': 'max_hold', 'label': 'Макс.св.', 'default': '20', 'width': 6},
             {'key': 'commission', 'label': 'Комис.%', 'default': '0.05', 'width': 6},
-            {'key': 'min_trades', 'label': 'Мин.сд.', 'default': '30', 'width': 6},
+            {'key': 'min_trades', 'label': 'Мин.сд.', 'default': '10', 'width': 6},
         ]
         for i, pcfg in enumerate(base_params_config):
             lbl = ttk.Label(param_frame, text=pcfg['label'] + ':', font=('', 8))
