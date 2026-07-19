@@ -990,8 +990,14 @@ class CreateStrategyApp:
             selected_stock = self.app.get_selected_ticker()
             strategy_name = params.get('strategy', '')
 
-            def _record_signal(ticker, side, price, sl, tp, entered):
+            def _record_signal(ticker, side, price, sl, tp, entered, date=None):
                 try:
+                    if date is not None and hasattr(date, 'strftime'):
+                        date_str = date.strftime('%Y-%m-%d %H:%M')
+                    elif date is not None:
+                        date_str = str(date)
+                    else:
+                        date_str = None
                     self.signal_storage.add_signal(
                         ticker=selected_stock or ticker,
                         side=side,
@@ -1000,6 +1006,7 @@ class CreateStrategyApp:
                         sl=sl,
                         tp=tp,
                         entered=entered,
+                        date=date_str,
                     )
                 except Exception:
                     pass

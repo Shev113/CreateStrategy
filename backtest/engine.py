@@ -69,7 +69,7 @@ class BacktestEngine:
         self._signal_func = None
         self._final_levels = []
         self._closed_trades = []  # for Kelly estimation
-        self.signal_recorder = None  # callable(ticker, side, price, sl, tp, entered)
+        self.signal_recorder = None  # callable(ticker, side, price, sl, tp, entered, date=None)
 
     def _calc_position_size(self, capital, entry_price, sl_price, atr):
         if self.position_sizing == 2:
@@ -195,7 +195,8 @@ class BacktestEngine:
                     if self.signal_recorder:
                         try:
                             self.signal_recorder('', signal['side'], float(signal.get('level', 0)),
-                                                 signal.get('sl_price'), signal.get('tp_price'), False)
+                                                 signal.get('sl_price'), signal.get('tp_price'),
+                                                 False, df.index[i])
                         except Exception:
                             pass
                     continue
@@ -208,7 +209,8 @@ class BacktestEngine:
                         if self.signal_recorder:
                             try:
                                 self.signal_recorder('', signal['side'], level,
-                                                     signal.get('sl_price'), signal.get('tp_price'), False)
+                                                     signal.get('sl_price'), signal.get('tp_price'),
+                                                     False, df.index[i])
                             except Exception:
                                 pass
                         continue
@@ -245,7 +247,7 @@ class BacktestEngine:
                     if self.signal_recorder:
                         try:
                             self.signal_recorder('', signal['side'], entry_price, sl,
-                                                 round(tp, 2), True)
+                                                 round(tp, 2), True, df.index[i])
                         except Exception:
                             pass
 
