@@ -38,7 +38,8 @@ def check_tsi(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0,
     num = _ema(_ema(roc, tsi_roc), tsi_smooth)
     den = _ema(_ema(np.abs(roc), tsi_roc), tsi_smooth)
 
-    tsi_vals = np.where(np.abs(den) > 1e-10, 100 * num / den, 0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        tsi_vals = np.where(np.abs(den) > 1e-10, 100 * num / den, 0)
     signal = _ema(tsi_vals, tsi_signal)
 
     current_tsi = tsi_vals[-1]

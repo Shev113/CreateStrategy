@@ -49,7 +49,8 @@ def check_eco(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0,
     num = _ema(_ema(body, eco_ave1), eco_ave2)
     den = _ema(_ema(spread, eco_ave1), eco_ave2)
 
-    eco_vals = np.where(np.abs(den) > 1e-10, 100 * num / den, 0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        eco_vals = np.where(np.abs(den) > 1e-10, 100 * num / den, 0)
     signal = _ema(eco_vals, eco_ave3)
 
     current_eco = eco_vals[-1]

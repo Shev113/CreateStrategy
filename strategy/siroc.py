@@ -59,7 +59,8 @@ def check_siroc(candles, idx, levels, atr, atr_sl=1.0, atr_tp=2.0,
     up_smooth = _ema(up, siroc_prd3)
     down_smooth = _ema(down, siroc_prd3)
     denom = up_smooth + down_smooth
-    siroc_vals = np.where(np.abs(denom) > 1e-10, 100 * up_smooth / denom, 50.0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        siroc_vals = np.where(np.abs(denom) > 1e-10, 100 * up_smooth / denom, 50.0)
 
     d_trigger = _ema(siroc_vals, siroc_prd3)
 
