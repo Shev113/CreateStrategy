@@ -2001,7 +2001,7 @@ class CreateStrategyApp:
 
         if triggered:
             if self.diary_ui:
-                self.diary_ui.refresh()
+                self.root.after(0, lambda: self.diary_ui.refresh())
             self.root.after(0, lambda: self.pending_ui.update_trades(self.pending_storage.get_all()))
 
     def _fetch_candles_for_pending(self, ticker, date_from, date_to):
