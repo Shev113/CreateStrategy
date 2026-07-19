@@ -22,6 +22,8 @@ try:
 except ImportError:
     HAS_SV_TTK = False
 
+from core.moex_session import MOEX_SESSION as _MOEX_SESSION
+
 from backtest.engine import BacktestEngine, export_results as _export_results, candles_to_df
 from screening.levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal
 from screening.reporter import generate_report
@@ -224,7 +226,7 @@ class CreateStrategyApp:
                     "from": current_start.strftime("%Y-%m-%d"),
                     "interval": 24
                 }
-                response = requests.get(url, params=params, timeout=30, verify=False)
+                response = _MOEX_SESSION.get(url, params=params, timeout=30)
                 response.raise_for_status()
                 data = response.json()
                 if "candles" in data and "data" in data["candles"]:
@@ -860,7 +862,7 @@ class CreateStrategyApp:
         """Получение списка тикеров MOEX (сырой HTTP-запрос)"""
         try:
             url = "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json"
-            response = requests.get(url, timeout=30, verify=False)
+            response = _MOEX_SESSION.get(url, timeout=30)
             response.raise_for_status()
             data = response.json()
             if "securities" in data and "data" in data["securities"]:

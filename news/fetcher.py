@@ -6,9 +6,8 @@ import time
 from datetime import datetime
 from typing import List, Dict, Optional
 
-import requests
-
 from utils import app_dir
+from core.moex_session import MOEX_SESSION
 
 NEWS_CACHE_PATH = os.path.join(app_dir(), 'results', 'news_cache.json')
 MOEX_NEWS_URL = 'https://iss.moex.com/iss/sitenews.json'
@@ -18,7 +17,7 @@ MOEX_NEWS_ITEM_URL = 'https://iss.moex.com/iss/sitenews/{id}.json'
 def fetch_news_list(count: int = 50, start: int = 0) -> List[Dict]:
     try:
         url = f'{MOEX_NEWS_URL}?start={start}&count={count}'
-        resp = requests.get(url, timeout=30, verify=False)
+        resp = MOEX_SESSION.get(url, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         columns = data.get('sitenews', {}).get('columns', [])
@@ -41,7 +40,7 @@ def fetch_news_list(count: int = 50, start: int = 0) -> List[Dict]:
 def fetch_news_body(news_id: int) -> Optional[str]:
     try:
         url = MOEX_NEWS_ITEM_URL.format(id=news_id)
-        resp = requests.get(url, timeout=30, verify=False)
+        resp = MOEX_SESSION.get(url, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         columns = data.get('content', {}).get('columns', [])

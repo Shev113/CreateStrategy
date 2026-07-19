@@ -3,10 +3,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
-import requests
-import urllib3
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from core.moex_session import MOEX_SESSION
 
 
 SECTOR_INDEX_MAP = {
@@ -27,7 +25,7 @@ def _fetch_index_candles(index_ticker, days=30):
     base_url = f"https://iss.moex.com/iss/engines/stock/markets/index/boards/SNDX/securities/{index_ticker}/candles.json"
     params = {"interval": 24}
     try:
-        response = requests.get(base_url, params=params, timeout=15, verify=False)
+        response = MOEX_SESSION.get(base_url, params=params, timeout=15)
         response.raise_for_status()
         data = response.json()
         if "candles" in data and "data" in data["candles"]:

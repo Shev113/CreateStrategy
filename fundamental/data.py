@@ -4,12 +4,8 @@ import os
 import threading
 from datetime import datetime
 
-import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 from utils import app_dir
+from core.moex_session import MOEX_SESSION
 
 _FUND_CACHE_PATH = os.path.join(app_dir(), 'results', 'fundamental_cache.json')
 
@@ -20,7 +16,7 @@ _EMITTER_URL = 'https://iss.moex.com/iss/emitters/{emitter_id}.json'
 
 def _fetch_json(url, params=None, timeout=20):
     try:
-        r = requests.get(url, params=params or {}, timeout=timeout, verify=False)
+        r = MOEX_SESSION.get(url, params=params or {}, timeout=timeout)
         r.raise_for_status()
         return r.json()
     except Exception as e:

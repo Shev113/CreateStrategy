@@ -7,12 +7,9 @@ import time
 
 import numpy as np
 import pandas as pd
-import requests
-import urllib3
 
 from utils import app_dir
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from core.moex_session import MOEX_SESSION
 
 REGIME_TRENDING_UP = 'TRENDING_UP'
 REGIME_TRENDING_DOWN = 'TRENDING_DOWN'
@@ -54,7 +51,7 @@ def fetch_imoex_candles(start_date=None, end_date=None, interval=24):
         params["till"] = end_date
 
     try:
-        response = requests.get(base_url, params=params, timeout=30, verify=False)
+        response = MOEX_SESSION.get(base_url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
         if "candles" in data and "data" in data["candles"]:

@@ -3,13 +3,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import datetime, timedelta
-import requests
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from intraday.strategies import SOLABUTO_REGISTRY, get_solabuto_defaults
 from intraday.engine import IntradayEngine, H1_BARS_PER_YEAR
 from core.session_store import get_cached_range, save_session, merge_candles, load_session
+from core.moex_session import MOEX_SESSION
 
 H1_INTERVAL = 60
 H1_DAYS_LIMIT = 30
@@ -75,7 +73,7 @@ def _fetch_h1_raw(ticker, start, end):
         nxt = min(cur + step, end_dt)
         params = {'from': cur.strftime('%Y-%m-%d'), 'till': nxt.strftime('%Y-%m-%d'), 'interval': H1_INTERVAL}
         try:
-            resp = requests.get(url, params=params, timeout=15, verify=False)
+            resp = MOEX_SESSION.get(url, params=params, timeout=15)
             resp.raise_for_status()
             data = resp.json()
             if 'candles' in data and 'data' in data['candles']:

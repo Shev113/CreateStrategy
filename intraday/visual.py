@@ -262,7 +262,7 @@ class IntradayUI:
         self.load_btn.config(state='disabled')
         def task():
             try:
-                import requests
+                from core.moex_session import MOEX_SESSION
                 from datetime import timedelta
                 url = (f'https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR'
                        f'/securities/{ticker}/candles.json')
@@ -274,7 +274,7 @@ class IntradayUI:
                 while cur < end_dt:
                     nxt = min(cur + step, end_dt)
                     params = {'from': cur.strftime('%Y-%m-%d'), 'till': nxt.strftime('%Y-%m-%d'), 'interval': H1_INTERVAL}
-                    resp = requests.get(url, params=params, timeout=15, verify=False)
+                    resp = MOEX_SESSION.get(url, params=params, timeout=15)
                     resp.raise_for_status()
                     data = resp.json()
                     if 'candles' in data and 'data' in data['candles']:
