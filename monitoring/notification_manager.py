@@ -19,6 +19,7 @@ TRIGGER_TYPES = {
     'signal_detected': 'Новый сигнал',
     'price_alert': 'Ценовой алерт',
     'news_alert': 'AI Новость',
+    'pending_triggered': 'Ордер активирован',
 }
 
 DEFAULT_TRIGGERS = {
@@ -33,6 +34,7 @@ DEFAULT_TRIGGERS = {
     'signal_detected': True,
     'price_alert': True,
     'news_alert': True,
+    'pending_triggered': True,
 }
 
 NOTIFY_FILE = os.path.join(app_dir(), 'results', 'notifications.json')

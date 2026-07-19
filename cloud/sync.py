@@ -20,6 +20,7 @@ _SYNC_FILES = [
     'price_alerts.json',
     'watchlist.json',
     'news_cache.json',
+    'pending_trades.json',
 ]
 
 _ENCRYPTED_FILES = {'ai_config.json'}

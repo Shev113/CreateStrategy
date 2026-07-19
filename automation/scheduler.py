@@ -26,6 +26,11 @@ TASK_DEFAULTS = {
         'enabled': False,
         'interval_min': 15,
     },
+    'check_pending_trades': {
+        'enabled': True,
+        'interval_min': 5,
+        'autostart': True,
+    },
 }
 
 

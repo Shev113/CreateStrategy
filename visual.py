@@ -43,13 +43,14 @@ class StockAppVisual:
                  on_optimize=None, on_portfolio=None, on_walkforward=None,
                  on_sensitivity=None, on_fundamental=None,
                  favorites=None, on_toggle_favorite=None,
-                 sector_db=None):
+                 sector_db=None, on_pending=None):
         self.root = parent.winfo_toplevel()
         self._last_signal = None
         self._last_params = None
         self._favorites = favorites or []
         self._on_toggle_favorite = on_toggle_favorite
         self._sector_db = sector_db
+        self._on_pending = on_pending
 
         # Разделяем вкладку на левую панель (управление) и правую (график)
         parent.grid_columnconfigure(0, weight=0, minsize=480)
@@ -217,6 +218,13 @@ class StockAppVisual:
         self.diary_btn.pack(side=tk.LEFT, padx=2)
         self.diary_btn.config(state='disabled')
         ToolTip(self.diary_btn, 'Добавить последний сигнал (с параметрами и результатом)\nв торговый дневник для отслеживания сделок.\nДневник сохраняется в results/diary.json')
+
+        self.pending_btn = ttk.Button(
+            btn_row, text="В ожидание", width=10,
+            command=lambda: self._on_pending() if self._on_pending else None)
+        self.pending_btn.pack(side=tk.LEFT, padx=2)
+        self.pending_btn.config(state='disabled')
+        ToolTip(self.pending_btn, 'Поставить лимитный ордер на вход по уровню сигнала.\nМонитор автоматически отследит касание цены\nи переведёт ордер в дневник как открытую сделку.\nФайл: results/pending_trades.json')
 
         self._on_show_settings = on_show_settings
         self._settings_btn = ttk.Button(
@@ -575,8 +583,10 @@ class StockAppVisual:
         self._last_params = params
         if signal and signal.get('action') in ('BUY', 'SELL'):
             self.diary_btn.config(state='normal')
+            self.pending_btn.config(state='normal')
         else:
             self.diary_btn.config(state='disabled')
+            self.pending_btn.config(state='disabled')
 
     def display_recommendation(self, signal, params=None):
         action = signal.get('action', 'NONE')

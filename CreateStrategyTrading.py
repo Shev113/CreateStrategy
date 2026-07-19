@@ -41,6 +41,9 @@ from settings_dialog import SettingsDialog
 from utils import normalize_numeric_params, migrate_ticker_settings, load_favorites, toggle_favorite, sort_tickers_by_favorites, app_dir, tree_batch_insert
 from core.moex_cache import moex_cache, cached_get_tickers
 from core.session_store import get_cached_range, save_session, merge_candles
+from pending.storage import PendingTradesStorage
+from pending.monitor import PendingTradesMonitor
+from pending.ui import PendingTradesUI
 
 # Настройка логирования
 logging.basicConfig(
@@ -280,6 +283,7 @@ class CreateStrategyApp:
         tab_scanner = ttk.Frame(notebook)
         tab_smart_scanner = ttk.Frame(notebook)
         tab_diary = ttk.Frame(notebook)
+        tab_pending = ttk.Frame(notebook)
         tab_positions = ttk.Frame(notebook)
         tab_review = ttk.Frame(notebook)
         tab_analytics = ttk.Frame(notebook)
@@ -294,6 +298,7 @@ class CreateStrategyApp:
         notebook.add(tab_scanner, text='Сканер')
         notebook.add(tab_smart_scanner, text='Умный сканер')
         notebook.add(tab_diary, text='Дневник сделок')
+        notebook.add(tab_pending, text='Ожидание')
         notebook.add(tab_positions, text='Позиции')
         notebook.add(tab_review, text='Обзор торговли')
         notebook.add(tab_analytics, text='Аналитика')
@@ -332,7 +337,8 @@ class CreateStrategyApp:
             on_fundamental=self._on_fundamental,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
-            sector_db=self.sector_db
+            sector_db=self.sector_db,
+            on_pending=self.on_add_to_pending,
         )
 
         all_sectors = self.sector_db.get_all_sectors()
@@ -358,6 +364,15 @@ class CreateStrategyApp:
             on_check_positions=self.on_check_positions,
             on_show_analysis=self.on_show_analysis
         )
+
+        self.pending_storage = PendingTradesStorage()
+        self.pending_ui = PendingTradesUI(
+            tab_pending,
+            on_remove=self._on_pending_remove,
+            on_refresh=self._on_pending_refresh,
+        )
+        self.pending_ui.update_trades(self.pending_storage.get_all())
+        self.pending_monitor = None
 
         from visual import PositionDashboardUI
         self.position_ui = PositionDashboardUI(
@@ -469,6 +484,7 @@ class CreateStrategyApp:
         self.scheduler.register_task('monitor_positions', self._auto_monitor_callback)
         self.scheduler.register_task('refresh_watchlist', self._auto_watchlist_callback)
         self.scheduler.register_task('auto_news_scan', self._auto_news_callback)
+        self.scheduler.register_task('check_pending_trades', self._auto_pending_check_callback)
 
         self.settings_dialog = SettingsDialog(
             self.root,
@@ -1848,6 +1864,154 @@ class CreateStrategyApp:
             ticker, entry.side, entry_price)
         mb.showinfo('В дневник', f'{ticker} добавлен в дневник.')
 
+    def on_add_to_pending(self) -> None:
+        """Поставить лимитный ордер на вход по уровню сигнала."""
+        signal = self.app._last_signal
+        params = self.app._last_params
+        if not signal or signal.get('action') not in ('BUY', 'SELL'):
+            mb.showinfo('В ожидание', 'Нет активного сигнала BUY/SELL.')
+            return
+        if not params:
+            mb.showinfo('В ожидание', 'Нет параметров. Запустите backtest.')
+            return
+
+        ticker = self.app.get_selected_ticker()
+        if not ticker:
+            return
+
+        entry_price = signal.get('level') or signal.get('last_price', 0)
+        sl_price = signal.get('sl_price', 0)
+        tp_price = signal.get('tp_price', 0)
+
+        confirm = mb.askyesno(
+            'Ожидание сделки',
+            f'Поставить лимитный ордер для {ticker}?\n\n'
+            f'Сигнал: {signal["action"]}\n'
+            f'Цена входа (уровень): {entry_price:.2f}\n'
+            f'SL: {sl_price:.2f} | TP: {tp_price:.2f}\n\n'
+            f'Монитор автоматически отследит касание цены\n'
+            f'и переведёт ордер в дневник как открытую сделку.'
+        )
+        if not confirm:
+            return
+
+        capital = params.get('capital', 1_000_000)
+        risk_per_trade = params.get('risk_per_trade', 0.02)
+        side_map = {'BUY': 'LONG', 'SELL': 'SHORT'}
+        side = side_map.get(signal['action'], signal['action'])
+        qty = calc_position_qty(capital, risk_per_trade, entry_price, sl_price)
+        volume = calc_position_volume(capital, risk_per_trade, entry_price, sl_price)
+
+        trade = self.pending_storage.add_pending(
+            ticker=ticker,
+            side=side,
+            entry_price=entry_price,
+            sl_price=sl_price,
+            tp_price=tp_price,
+            qty=qty,
+            volume=volume,
+            capital=capital,
+            risk_per_trade=risk_per_trade,
+            max_hold=params.get('max_hold', 20),
+            source='analysis',
+        )
+        self.pending_ui.update_trades(self.pending_storage.get_all())
+        self.notification_manager.notify(
+            'pending_triggered',
+            f'Ордер установлен: {ticker}',
+            f'{side} @ {entry_price:.2f} | SL {sl_price:.2f} | TP {tp_price:.2f}',
+            icon='info',
+        )
+        mb.showinfo('В ожидание', f'Ордер для {ticker} установлен в очередь ожидания.')
+
+    def _on_pending_remove(self, pending_id):
+        """Удалить запись из ожидания или очистить сработавшие."""
+        if pending_id == '__clear_triggered__':
+            self.pending_storage.clear_triggered()
+        else:
+            for t in self.pending_storage.get_all():
+                if t.pending_id == pending_id or t.created == pending_id:
+                    self.pending_storage.remove_pending(t.pending_id)
+                    break
+        self.pending_ui.update_trades(self.pending_storage.get_all())
+
+    def _on_pending_refresh(self):
+        """Обновить таблицу ожидания."""
+        self.pending_ui.update_trades(self.pending_storage.get_all())
+
+    def _auto_pending_check_callback(self):
+        """Фоновая задача: проверка срабатывания ожидающих ордеров."""
+        if not self.pending_storage.get_active():
+            return
+        try:
+            self._pending_do_check()
+        except Exception as e:
+            logging.warning(f'Pending check error: {e}')
+
+    def _pending_do_check(self):
+        """Выполнить проверку и обновить UI в главном потоке."""
+        from datetime import datetime
+        from pending.storage import check_entry_touch
+        from diary.journal import DiaryEntry
+
+        active = self.pending_storage.get_active()
+        if not active:
+            return
+
+        triggered = []
+        today_str = datetime.now().strftime('%Y-%m-%d')
+
+        for trade in active:
+            try:
+                date_from = trade.created[:10]
+                candles = self._fetch_candles_for_pending(trade.ticker, date_from, today_str)
+                if isinstance(candles, str) or not isinstance(candles, list):
+                    continue
+                if len(candles) < 1:
+                    continue
+                if check_entry_touch(trade.entry_price, candles):
+                    triggered.append(trade)
+            except Exception as e:
+                logging.debug(f'Pending check error for {trade.ticker}: {e}')
+
+        for trade in triggered:
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+            self.pending_storage.mark_triggered(trade.pending_id, now_str)
+
+            entry = DiaryEntry(
+                date=now_str,
+                ticker=trade.ticker,
+                side=trade.side,
+                entry_price=trade.entry_price,
+                sl_price=trade.sl_price,
+                tp_price=trade.tp_price,
+                volume=trade.volume,
+                qty=trade.qty,
+                status='open',
+                max_hold=trade.max_hold,
+            )
+            self.diary_storage.add_entries([entry])
+
+            self.notification_manager.notify(
+                'pending_triggered',
+                f'Ордер активирован: {trade.ticker}',
+                f'{trade.side} @ {trade.entry_price:.2f} | SL {trade.sl_price:.2f} | TP {trade.tp_price:.2f}',
+                icon='info',
+            )
+
+        if triggered:
+            if self.diary_ui:
+                self.diary_ui.refresh()
+            self.root.after(0, lambda: self.pending_ui.update_trades(self.pending_storage.get_all()))
+
+    def _fetch_candles_for_pending(self, ticker, date_from, date_to):
+        """Получить свечи для проверки ожидающего ордера."""
+        try:
+            return self.get_stock_data(ticker, date_from, date_to)
+        except Exception as e:
+            logging.debug(f'Fetch candles for pending {ticker}: {e}')
+            return None
+
     def on_show_ticker_settings(self) -> None:
         """Показать индивидуальные настройки для каждой бумаги"""
         path = os.path.join(app_dir(), 'results', 'ticker_settings.json')
@@ -2255,7 +2419,7 @@ class CreateStrategyApp:
         if self.scheduler.get_autostart_monitor():
             self._on_position_start()
 
-        for name in ['auto_scan', 'monitor_positions', 'refresh_watchlist']:
+        for name in ['auto_scan', 'monitor_positions', 'refresh_watchlist', 'check_pending_trades']:
             task = self.scheduler.get_task(name)
             if task and task.enabled and not task.is_running:
                 self.scheduler.start_task(name)
