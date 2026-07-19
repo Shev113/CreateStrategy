@@ -193,13 +193,19 @@ class AutomationScheduler:
                 self._notify_status()
 
                 if task._running:
-                    task._after_id = self.root.after(
-                        task.interval_min * 60_000,
-                        lambda: self._run_task(task)
-                    )
+                    self.root.after(0, lambda t=task: self._schedule_next(t))
 
         t = threading.Thread(target=do, daemon=True)
         t.start()
+
+    def _schedule_next(self, task):
+        """Поставить следующий запуск задачи из главного потока."""
+        if not task._running:
+            return
+        task._after_id = self.root.after(
+            task.interval_min * 60_000,
+            lambda: self._run_task(task)
+        )
 
     def run_task_now(self, name):
         task = self._tasks.get(name)

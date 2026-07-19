@@ -53,10 +53,16 @@ class PendingTradesMonitor:
         def do():
             self._do_check()
             if self._running:
-                self._after_id = self.root.after(self._interval_sec * 1000, self._check)
+                self.root.after(0, self._schedule_next)
 
         t = threading.Thread(target=do, daemon=True)
         t.start()
+
+    def _schedule_next(self):
+        """Поставить следующий запуск из главного потока."""
+        if not self._running:
+            return
+        self._after_id = self.root.after(self._interval_sec * 1000, self._check)
 
     def _do_check(self):
         active = self.pending_storage.get_active()
