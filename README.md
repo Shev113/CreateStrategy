@@ -119,6 +119,7 @@ CI выполняет:
 - `docs/ONBOARDING.md` - быстрый старт для нового разработчика
 - `docs/DEVELOPER_CHECKLIST.md` - короткий чеклист перед завершением задачи
 - `docs/ARCHITECTURE.md` - карта модулей и связи между ними
+- `docs/known_bias.md` - известные ограничения (survivorship bias, look-ahead bias)
 
 ## Основные сценарии использования
 
