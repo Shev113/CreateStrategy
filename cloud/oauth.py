@@ -88,10 +88,11 @@ def get_valid_token() -> str | None:
     return None
 
 
-def exchange_code_for_token(code: str, redirect_uri: str = None) -> dict | None:
+def exchange_code_for_token(code: str, redirect_uri: str = None) -> tuple[dict | None, str]:
     if not _client_id or not _client_secret:
-        logging.error('OAuth client_id/client_secret not set')
-        return None
+        msg = 'OAuth client_id/client_secret не указаны'
+        logging.error(msg)
+        return None, msg
     if not redirect_uri:
         redirect_uri = _VERIFICATION_CODE_REDIRECT
     try:
@@ -102,19 +103,29 @@ def exchange_code_for_token(code: str, redirect_uri: str = None) -> dict | None:
             'client_secret': _client_secret,
             'redirect_uri': redirect_uri,
         }, timeout=15)
-        resp.raise_for_status()
         data = resp.json()
+        if 'error' in data:
+            err = data.get('error_description', data['error'])
+            logging.error(f'Token exchange error: {err}')
+            return None, err
+        resp.raise_for_status()
         save_token(data)
-        return data
+        return data, ''
+    except requests.exceptions.RequestException as e:
+        msg = f'Сетевая ошибка: {e}'
+        logging.error(msg)
+        return None, msg
     except Exception as e:
-        logging.error(f'Token exchange error: {e}')
-        return None
+        msg = f'Ошибка обмена кода: {e}'
+        logging.error(msg)
+        return None, msg
 
 
-def start_oauth_flow() -> bool:
+def start_oauth_flow() -> tuple[bool, str]:
     if not _client_id:
-        logging.error('OAuth client_id not set')
-        return False
+        msg = 'OAuth client_id не указан'
+        logging.error(msg)
+        return False, msg
 
     auth_url = (
         f'{_OAUTH_URL}?response_type=code'
@@ -122,15 +133,19 @@ def start_oauth_flow() -> bool:
         f'&redirect_uri={_VERIFICATION_CODE_REDIRECT}'
     )
     webbrowser.open(auth_url)
-    return False
+    return False, ''
 
 
-def manual_code_flow(verification_code: str, redirect_uri: str = None) -> bool:
+def manual_code_flow(verification_code: str, redirect_uri: str = None) -> tuple[bool, str]:
     if not _client_id or not _client_secret:
-        logging.error('OAuth client_id/client_secret not set')
-        return False
+        msg = 'OAuth client_id/client_secret не указаны'
+        logging.error(msg)
+        return False, msg
     if not verification_code:
-        logging.error('Verification code is empty')
-        return False
-    token_data = exchange_code_for_token(verification_code, redirect_uri=redirect_uri)
-    return token_data is not None
+        msg = 'Код подтверждения пустой'
+        logging.error(msg)
+        return False, msg
+    token_data, err = exchange_code_for_token(verification_code, redirect_uri=redirect_uri)
+    if token_data:
+        return True, ''
+    return False, err

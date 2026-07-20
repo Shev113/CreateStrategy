@@ -222,11 +222,11 @@ class CloudPanel:
 
         def do_connect():
             try:
-                result = start_oauth_flow()
-                self.root.after(0, self._on_connect_done, result)
+                result, err = start_oauth_flow()
+                self.root.after(0, self._on_connect_done, result, err)
             except Exception as e:
                 logging.error(f'OAuth error: {e}')
-                self.root.after(0, self._on_connect_done, False)
+                self.root.after(0, self._on_connect_done, False, str(e))
 
         threading.Thread(target=do_connect, daemon=True).start()
         self._status_var.set('Ожидание авторизации...')
@@ -250,35 +250,79 @@ class CloudPanel:
 
         def do_connect():
             try:
-                result = manual_code_flow(code)
-                self.root.after(0, self._on_connect_done, result)
+                result, err = manual_code_flow(code)
+                self.root.after(0, self._on_connect_done, result, err)
             except Exception as e:
                 logging.error(f'Manual OAuth error: {e}')
-                self.root.after(0, self._on_connect_done, False)
+                self.root.after(0, self._on_connect_done, False, str(e))
 
         threading.Thread(target=do_connect, daemon=True).start()
         self._status_var.set('Подключение по коду...')
         self._connect_code_btn.config(state='disabled')
 
-    def _on_connect_done(self, success):
+    def _show_error_dialog(self, title, message, details=''):
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.geometry('500x250')
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+
+        frame = ttk.Frame(win, padding=15)
+        frame.pack(fill='both', expand=True)
+
+        ttk.Label(frame, text=message, wraplength=460, justify='left',
+                  font=('Segoe UI', 10)).pack(anchor='w', pady=(0, 10))
+
+        if details:
+            text = tk.Text(frame, height=4, wrap='word', font=('Consolas', 9),
+                           relief='solid', borderwidth=1)
+            text.insert('1.0', details)
+            text.config(state='disabled')
+            text.pack(fill='x', pady=(0, 10))
+
+            btn_frame = ttk.Frame(frame)
+            btn_frame.pack(fill='x')
+
+            ttk.Button(btn_frame, text='📋 Копировать ошибку',
+                       command=lambda: self._copy_error(details, win)).pack(side='left', padx=(0, 5))
+
+        ttk.Button(frame, text='Закрыть',
+                   command=win.destroy).pack()
+
+    def _copy_error(self, text, win=None):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        if win:
+            win.destroy()
+
+    def _on_connect_done(self, success, error_msg=''):
         if success:
             self._status_var.set('Подключено к Яндекс.Диску')
             self._connect_btn.config(state='disabled')
+            self._connect_code_btn.config(state='disabled')
             self._disconnect_btn.config(state='normal')
             self._upload_btn.config(state='normal')
             self._download_btn.config(state='normal')
             self._sync_btn.config(state='normal')
+            self._code_var.set('')
         else:
             self._status_var.set('Авторизация не удалась')
             self._connect_btn.config(state='normal')
             self._connect_code_btn.config(state='normal')
-            messagebox.showinfo(
-                'Авторизация',
-                'Открыта страница Яндекс OAuth.\n\n'
-                'После подтверждения доступа на странице Яндекса\n'
-                'вы увидите код подтверждения.\n\n'
-                'Скопируйте его и вставьте в поле "Код подтверждения",\n'
-                'затем нажмите "Подключить по коду".')
+            if error_msg:
+                self._show_error_dialog(
+                    'Ошибка авторизации',
+                    'Яндекс вернул ошибку. Скопируйте текст ниже и предоставьте его разработчику:',
+                    error_msg)
+            else:
+                self._show_error_dialog(
+                    'Авторизация',
+                    'Открыта страница Яндекс OAuth.\n\n'
+                    'После подтверждения доступа на странице Яндекса\n'
+                    'вы увидите код подтверждения.\n\n'
+                    'Скопируйте его и вставьте в поле "Код подтверждения",\n'
+                    'затем нажмите "Подключить по коду".')
         self._refresh_files_list()
 
     def _on_disconnect(self):
