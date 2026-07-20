@@ -558,10 +558,10 @@ class StockAppVisual:
             f"Общая доходность:   {metrics['total_return']:+.2f} %",
             "",
             f"Всего сделок:       {metrics['total_trades']}",
-            f"Win Rate:           {metrics['win_rate']:.1f} %",
-            f"Profit Factor:      {metrics['profit_factor']}",
-            f"Max Drawdown:       -{metrics['max_drawdown']:.2f} %",
-            f"Sharpe Ratio:       {metrics['sharpe']}",
+            f"Доля прибыльных:    {metrics['win_rate']:.1f} %",
+            f"Профит-фактор:      {metrics['profit_factor']}",
+            f"Макс. просадка:     -{metrics['max_drawdown']:.2f} %",
+            f"Коэф. Шарпа:        {metrics['sharpe']}",
             "",
         ]
         # Advanced metrics (only when include_advanced was used upstream).
@@ -573,15 +573,15 @@ class StockAppVisual:
         if any(v is not None for v in (sortino, calmar, var_95, cvar_95, ulcer)):
             lines.append("-- Риск-метрики --")
             if sortino is not None:
-                lines.append(f"Sortino Ratio:      {sortino}")
+                lines.append(f"Коэф. Сортино:      {sortino}")
             if calmar is not None:
-                lines.append(f"Calmar Ratio:       {calmar}")
+                lines.append(f"Коэф. Кальмара:     {calmar}")
             if var_95 is not None:
                 lines.append(f"VaR (95%):          {var_95:+.2f} %")
             if cvar_95 is not None:
                 lines.append(f"CVaR (95%):         {cvar_95:+.2f} %")
             if ulcer is not None:
-                lines.append(f"Ulcer Index:        {ulcer:.2f}")
+                lines.append(f"Индекс Язвы:        {ulcer:.2f}")
             lines.append("")
 
         lines.append(f"Средняя прибыль:    {metrics['avg_win']:+,.2f} руб" if metrics.get('avg_win') else "")
