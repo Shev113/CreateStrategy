@@ -1,10 +1,15 @@
 import json
 import logging
+import warnings
 import webbrowser
 
 import requests
+from urllib3.exceptions import InsecureRequestWarning
 
 from utils import app_dir
+
+warnings.filterwarnings('ignore', category=InsecureRequestWarning)
+_VERIFY_SSL = False
 
 _TOKEN_FILE = 'cloud_token.json'
 _OAUTH_URL = 'https://oauth.yandex.ru/authorize'
@@ -63,7 +68,7 @@ def refresh_access_token(refresh_token: str) -> dict | None:
             'refresh_token': refresh_token,
             'client_id': _client_id,
             'client_secret': _client_secret,
-        }, timeout=15)
+        }, timeout=15, verify=_VERIFY_SSL)
         resp.raise_for_status()
         data = resp.json()
         save_token(data)
@@ -102,7 +107,7 @@ def exchange_code_for_token(code: str, redirect_uri: str = None) -> tuple[dict |
             'client_id': _client_id,
             'client_secret': _client_secret,
             'redirect_uri': redirect_uri,
-        }, timeout=15)
+        }, timeout=15, verify=_VERIFY_SSL)
         data = resp.json()
         if 'error' in data:
             err = data.get('error_description', data['error'])
