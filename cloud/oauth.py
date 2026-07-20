@@ -1,9 +1,6 @@
 import json
 import logging
-import threading
 import webbrowser
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
 
 import requests
 
@@ -12,8 +9,7 @@ from utils import app_dir
 _TOKEN_FILE = 'cloud_token.json'
 _OAUTH_URL = 'https://oauth.yandex.ru/authorize'
 _TOKEN_URL = 'https://oauth.yandex.ru/token'
-_DEFAULT_REDIRECT_PORT = 9876
-_DEFAULT_REDIRECT_URI = f'http://localhost:{_DEFAULT_REDIRECT_PORT}'
+_VERIFICATION_CODE_REDIRECT = 'https://oauth.yandex.ru/verification_code'
 
 _client_id = None
 _client_secret = None
@@ -92,48 +88,12 @@ def get_valid_token() -> str | None:
     return None
 
 
-class _OAuthHandler(BaseHTTPRequestHandler):
-    auth_code = None
-
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        params = parse_qs(parsed.query)
-        code = params.get('code', [None])[0]
-        error = params.get('error', [None])[0]
-
-        if code:
-            _OAuthHandler.auth_code = code
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(
-                '<html><body style="background:#1e1e1e;color:#fff;font-family:sans-serif;'
-                'display:flex;align-items:center;justify-content:center;height:100vh">'
-                '<h2>&#10004; Авторизация успешна! Можно закрыть это окно.</h2></body></html>'.encode('utf-8'))
-        elif error:
-            _OAuthHandler.auth_code = None
-            self.send_response(400)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.end_headers()
-            err_desc = params.get('error_description', ['Ошибка авторизации'])[0]
-            self.wfile.write(
-                f'<html><body style="background:#1e1e1e;color:#f66;font-family:sans-serif;'
-                f'display:flex;align-items:center;justify-content:center;height:100vh">'
-                f'<h2>&#10008; {err_desc}</h2></body></html>'.encode('utf-8'))
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
-
-
 def exchange_code_for_token(code: str, redirect_uri: str = None) -> dict | None:
     if not _client_id or not _client_secret:
         logging.error('OAuth client_id/client_secret not set')
         return None
     if not redirect_uri:
-        redirect_uri = _DEFAULT_REDIRECT_URI
+        redirect_uri = _VERIFICATION_CODE_REDIRECT
     try:
         resp = requests.post(_TOKEN_URL, data={
             'grant_type': 'authorization_code',
@@ -151,69 +111,18 @@ def exchange_code_for_token(code: str, redirect_uri: str = None) -> dict | None:
         return None
 
 
-def start_oauth_flow(callback=None, redirect_uri: str = None) -> bool:
+def start_oauth_flow() -> bool:
     if not _client_id:
         logging.error('OAuth client_id not set')
         return False
 
-    _OAuthHandler.auth_code = None
-    if not redirect_uri:
-        redirect_uri = _DEFAULT_REDIRECT_URI
-
-    base_port = _DEFAULT_REDIRECT_PORT
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(redirect_uri)
-        if parsed.port:
-            base_port = parsed.port
-    except Exception:
-        pass
-
-    server = None
-    chosen_port = base_port
-    for port in range(base_port, base_port + 10):
-        try:
-            server = HTTPServer(('127.0.0.1', port), _OAuthHandler)
-            server.timeout = 120
-            chosen_port = port
-            break
-        except OSError:
-            continue
-
-    if server is None:
-        # Ни один порт не свободен — открываем браузер без локального сервера,
-        # пользователь скопирует code из адресной строки вручную
-        auth_url = (
-            f'{_OAUTH_URL}?response_type=code'
-            f'&client_id={_client_id}'
-            f'&redirect_uri={redirect_uri}'
-        )
-        webbrowser.open(auth_url)
-        return False
-
-    # Обновляем redirect_uri с реально занятым портом (если отличается)
-    if chosen_port != base_port:
-        redirect_uri = f'http://localhost:{chosen_port}'
-
     auth_url = (
         f'{_OAUTH_URL}?response_type=code'
         f'&client_id={_client_id}'
-        f'&redirect_uri={redirect_uri}'
+        f'&redirect_uri={_VERIFICATION_CODE_REDIRECT}'
     )
     webbrowser.open(auth_url)
-
-    server.handle_request()
-    server.server_close()
-
-    code = _OAuthHandler.auth_code
-    if not code:
-        return False
-
-    token_data = exchange_code_for_token(code, redirect_uri=redirect_uri)
-    if token_data and callback:
-        callback(token_data)
-
-    return token_data is not None
+    return False
 
 
 def manual_code_flow(verification_code: str, redirect_uri: str = None) -> bool:

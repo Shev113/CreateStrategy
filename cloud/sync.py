@@ -5,7 +5,7 @@ import time
 from typing import Callable
 
 from cloud.crypto import encrypt_json, decrypt_json, obfuscate_json, deobfuscate_json
-from cloud.oauth import get_valid_token, load_token, delete_token, save_token, set_oauth_app
+from cloud.oauth import get_valid_token, load_token, delete_token, save_token, set_oauth_app, _VERIFICATION_CODE_REDIRECT
 from cloud.provider import provider, YandexDiskProvider
 
 _SYNC_FILES = [
@@ -120,7 +120,7 @@ class SyncManager:
         self._auto_sync_on_close = False
         self._client_id = ''
         self._client_secret = ''
-        self._redirect_uri = 'http://localhost:9876'
+        self._redirect_uri = _VERIFICATION_CODE_REDIRECT
         self._load_config()
 
     def _config_path(self) -> str:
@@ -135,7 +135,7 @@ class SyncManager:
             self._auto_sync_on_close = cfg.get('auto_sync_on_close', False)
             self._client_id = cfg.get('client_id', '')
             self._client_secret = cfg.get('client_secret', '')
-            self._redirect_uri = cfg.get('redirect_uri', 'http://localhost:9876')
+            self._redirect_uri = cfg.get('redirect_uri', _VERIFICATION_CODE_REDIRECT)
             if self._client_id and self._client_secret:
                 set_oauth_app(self._client_id, self._client_secret)
         except Exception:

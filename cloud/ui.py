@@ -5,7 +5,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import ttk, messagebox
 
-from cloud.sync import sync_manager, get_sync_files, is_encrypted_file, _load_cloud_meta
+from cloud.sync import sync_manager, get_sync_files, is_encrypted_file, _load_cloud_meta, _VERIFICATION_CODE_REDIRECT
 from cloud.oauth import start_oauth_flow, manual_code_flow, get_valid_token, load_token, delete_token
 
 
@@ -61,17 +61,9 @@ class CloudPanel:
                    command=lambda: self._paste_to(self._client_secret_var)).grid(
             row=1, column=2, padx=(3, 0), pady=2)
 
-        ttk.Label(settings_frame, text='Redirect URI:').grid(row=2, column=0, sticky='w', pady=2)
-        self._redirect_uri_var = tk.StringVar(value=sync_manager.redirect_uri)
-        ttk.Entry(settings_frame, textvariable=self._redirect_uri_var, width=45).grid(
-            row=2, column=1, sticky='ew', padx=(5, 0), pady=2)
-        ttk.Button(settings_frame, text='Вставить',
-                   command=lambda: self._paste_to(self._redirect_uri_var)).grid(
-            row=2, column=2, padx=(3, 0), pady=2)
-
-        ttk.Label(settings_frame, text='Код подтверждения:').grid(row=3, column=0, sticky='w', pady=2)
+        ttk.Label(settings_frame, text='Код подтверждения:').grid(row=2, column=0, sticky='w', pady=2)
         code_frame = ttk.Frame(settings_frame)
-        code_frame.grid(row=3, column=1, sticky='ew', padx=(5, 0), pady=2)
+        code_frame.grid(row=2, column=1, sticky='ew', padx=(5, 0), pady=2)
         self._code_var = tk.StringVar()
         code_entry = ttk.Entry(code_frame, textvariable=self._code_var, width=30)
         code_entry.pack(side='left', fill='x', expand=True)
@@ -81,22 +73,22 @@ class CloudPanel:
                                             command=self._on_connect_manual)
         self._connect_code_btn.pack(side='left', padx=(3, 0))
 
-        ttk.Label(settings_frame, text='Пароль шифрования:').grid(row=5, column=0, sticky='w', pady=2)
+        ttk.Label(settings_frame, text='Пароль шифрования:').grid(row=3, column=0, sticky='w', pady=2)
         self._password_var = tk.StringVar(value=sync_manager.sync_password)
         ttk.Entry(settings_frame, textvariable=self._password_var, width=45,
-                  show='*').grid(row=5, column=1, sticky='ew', padx=(5, 0), pady=2)
+                  show='*').grid(row=3, column=1, sticky='ew', padx=(5, 0), pady=2)
         ttk.Button(settings_frame, text='Вставить',
                    command=lambda: self._paste_to(self._password_var)).grid(
-            row=5, column=2, padx=(3, 0), pady=2)
+            row=3, column=2, padx=(3, 0), pady=2)
 
         self._auto_sync_var = tk.BooleanVar(value=sync_manager.auto_sync_on_close)
         ttk.Checkbutton(settings_frame, text='Автосинк при закрытии приложения',
                          variable=self._auto_sync_var).grid(
-            row=5, column=0, columnspan=2, sticky='w', pady=(5, 0))
+            row=3, column=0, columnspan=2, sticky='w', pady=(5, 0))
 
         ttk.Button(settings_frame, text='Сохранить настройки',
                     command=self._save_settings).grid(
-            row=6, column=0, columnspan=2, pady=(10, 0))
+            row=4, column=0, columnspan=2, pady=(10, 0))
 
         settings_frame.columnconfigure(1, weight=1)
 
@@ -112,15 +104,15 @@ class CloudPanel:
         link1.pack(side='left')
         link1.bind('<Button-1>', lambda e: self._open_url('https://oauth.yandex.ru/'))
 
-        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы), укажите Redirect URI: http://localhost:9876',
+        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы), Redirect URI установится автоматически',
                   font=('Segoe UI', 9), foreground='gray', justify='left').pack(anchor='w')
         ttk.Label(help_frame, text='3. Дайте доступ: Яндекс.Диск (чтение/запись)',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
         ttk.Label(help_frame, text='4. Скопируйте Client ID и Client Secret выше',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
-        ttk.Label(help_frame, text='5. Нажмите "Подключить". Если автоавторизация не сработала —',
+        ttk.Label(help_frame, text='5. Нажмите "Подключить", подтвердите доступ на Яндексе,',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
-        ttk.Label(help_frame, text='   вставьте код из адресной строки в поле "Код подтверждения"',
+        ttk.Label(help_frame, text='   скопируйте код и вставьте в поле "Код подтверждения"',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
 
         actions_frame = ttk.LabelFrame(main, text='Синхронизация', padding=10)
@@ -230,7 +222,7 @@ class CloudPanel:
 
         def do_connect():
             try:
-                result = start_oauth_flow(redirect_uri=self._redirect_uri_var.get().strip())
+                result = start_oauth_flow()
                 self.root.after(0, self._on_connect_done, result)
             except Exception as e:
                 logging.error(f'OAuth error: {e}')
@@ -258,7 +250,7 @@ class CloudPanel:
 
         def do_connect():
             try:
-                result = manual_code_flow(code, redirect_uri=self._redirect_uri_var.get().strip())
+                result = manual_code_flow(code)
                 self.root.after(0, self._on_connect_done, result)
             except Exception as e:
                 logging.error(f'Manual OAuth error: {e}')
@@ -282,9 +274,11 @@ class CloudPanel:
             self._connect_code_btn.config(state='normal')
             messagebox.showinfo(
                 'Авторизация',
-                'Не удалось выполнить автоматическую авторизацию.\n\n'
-                'Скопируйте код из адресной строки браузера (параметр ?code=...)\n'
-                'и вставьте его в поле "Код подтверждения", затем нажмите "Подключить по коду".')
+                'Открыта страница Яндекс OAuth.\n\n'
+                'После подтверждения доступа на странице Яндекса\n'
+                'вы увидите код подтверждения.\n\n'
+                'Скопируйте его и вставьте в поле "Код подтверждения",\n'
+                'затем нажмите "Подключить по коду".')
         self._refresh_files_list()
 
     def _on_disconnect(self):
@@ -296,7 +290,6 @@ class CloudPanel:
     def _save_settings(self):
         sync_manager.client_id = self._client_id_var.get().strip()
         sync_manager.client_secret = self._client_secret_var.get().strip()
-        sync_manager.redirect_uri = self._redirect_uri_var.get().strip()
         sync_manager.sync_password = self._password_var.get()
         sync_manager.auto_sync_on_close = self._auto_sync_var.get()
         sync_manager.save_config()
