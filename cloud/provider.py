@@ -1,11 +1,16 @@
 import json
 import logging
 import time
+import warnings
 from typing import Callable
 
 import requests
+from urllib3.exceptions import InsecureRequestWarning
 
 from cloud.oauth import get_valid_token
+
+warnings.filterwarnings('ignore', category=InsecureRequestWarning)
+_VERIFY_SSL = False
 
 _API_BASE = 'https://cloud-api.yandex.net/v1/disk'
 _APP_FOLDER = 'app:/CreateStrategy'
@@ -27,13 +32,13 @@ class YandexDiskProvider:
         if not headers:
             return None
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=20)
+            resp = requests.get(url, headers=headers, params=params, timeout=20, verify=_VERIFY_SSL)
             if resp.status_code == 401:
                 self._token = None
                 headers = self._headers()
                 if not headers:
                     return None
-                resp = requests.get(url, headers=headers, params=params, timeout=20)
+                resp = requests.get(url, headers=headers, params=params, timeout=20, verify=_VERIFY_SSL)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -47,7 +52,7 @@ class YandexDiskProvider:
         if headers_extra:
             headers.update(headers_extra)
         try:
-            resp = requests.put(url, headers=headers, data=data, json=json_data, timeout=20)
+            resp = requests.put(url, headers=headers, data=data, json=json_data, timeout=20, verify=_VERIFY_SSL)
             if resp.status_code == 401:
                 self._token = None
                 headers = self._headers()
@@ -55,7 +60,7 @@ class YandexDiskProvider:
                     return False
                 if headers_extra:
                     headers.update(headers_extra)
-                resp = requests.put(url, headers=headers, data=data, json=json_data, timeout=20)
+                resp = requests.put(url, headers=headers, data=data, json=json_data, timeout=20, verify=_VERIFY_SSL)
             return resp.status_code in (200, 201)
         except Exception as e:
             logging.error(f'YandexDisk PUT {url}: {e}')
@@ -73,13 +78,13 @@ class YandexDiskProvider:
         if not headers:
             return False, 'Нет токена'
         try:
-            resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20)
+            resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20, verify=_VERIFY_SSL)
             if resp.status_code == 401:
                 self._token = None
                 headers = self._headers()
                 if not headers:
                     return False, 'Нет токена'
-                resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20)
+                resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20, verify=_VERIFY_SSL)
             if resp.status_code in (200, 201):
                 return True, ''
             msg = f'HTTP {resp.status_code}: {resp.text[:200]}'
@@ -129,7 +134,7 @@ class YandexDiskProvider:
 
         try:
             headers = self._headers() or {}
-            resp = requests.put(upload_url, data=file_data, headers=headers, timeout=60)
+            resp = requests.put(upload_url, data=file_data, headers=headers, timeout=60, verify=_VERIFY_SSL)
             if resp.status_code in (200, 201):
                 return True, ''
             msg = f'Загрузка {remote_name}: HTTP {resp.status_code} {resp.reason}'
@@ -150,7 +155,7 @@ class YandexDiskProvider:
 
         download_url = data['href']
         try:
-            resp = requests.get(download_url, timeout=60)
+            resp = requests.get(download_url, timeout=60, verify=_VERIFY_SSL)
             resp.raise_for_status()
             import os
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
@@ -171,7 +176,7 @@ class YandexDiskProvider:
                 f'{_API_BASE}/resources',
                 headers=headers,
                 params={'path': f'{_APP_FOLDER}/{remote_name}', 'permanently': 'true'},
-                timeout=20)
+                timeout=20, verify=_VERIFY_SSL)
             return resp.status_code in (200, 202, 204)
         except Exception as e:
             logging.error(f'Delete error {remote_name}: {e}')
