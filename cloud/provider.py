@@ -91,35 +91,43 @@ class YandexDiskProvider:
         return result
 
     def upload_file(self, local_path: str, remote_name: str,
-                    on_progress: Callable[[int, int], None] = None) -> bool:
+                    on_progress: Callable[[int, int], None] = None) -> tuple[bool, str]:
         data = self._get(f'{_API_BASE}/resources/upload',
                          params={'path': f'{_APP_FOLDER}/{remote_name}', 'overwrite': 'true'})
         if not data or 'href' not in data:
-            logging.error(f'No upload URL for {remote_name}')
-            return False
+            msg = f'Нет URL для загрузки {remote_name}'
+            logging.error(msg)
+            return False, msg
 
         upload_url = data['href']
         try:
             with open(local_path, 'rb') as f:
                 file_data = f.read()
         except Exception as e:
-            logging.error(f'Read error {local_path}: {e}')
-            return False
+            msg = f'Ошибка чтения {local_path}: {e}'
+            logging.error(msg)
+            return False, msg
 
         try:
             headers = self._headers() or {}
             resp = requests.put(upload_url, data=file_data, headers=headers, timeout=60)
-            return resp.status_code in (200, 201)
+            if resp.status_code in (200, 201):
+                return True, ''
+            msg = f'Загрузка {remote_name}: HTTP {resp.status_code} {resp.reason}'
+            logging.error(msg)
+            return False, msg
         except Exception as e:
-            logging.error(f'Upload error {remote_name}: {e}')
-            return False
+            msg = f'Ошибка загрузки {remote_name}: {e}'
+            logging.error(msg)
+            return False, msg
 
-    def download_file(self, remote_name: str, local_path: str) -> bool:
+    def download_file(self, remote_name: str, local_path: str) -> tuple[bool, str]:
         data = self._get(f'{_API_BASE}/resources/download',
                          params={'path': f'{_APP_FOLDER}/{remote_name}'})
         if not data or 'href' not in data:
-            logging.error(f'No download URL for {remote_name}')
-            return False
+            msg = f'Нет URL для скачивания {remote_name}'
+            logging.error(msg)
+            return False, msg
 
         download_url = data['href']
         try:
@@ -129,10 +137,11 @@ class YandexDiskProvider:
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
                 f.write(resp.content)
-            return True
+            return True, ''
         except Exception as e:
-            logging.error(f'Download error {remote_name}: {e}')
-            return False
+            msg = f'Ошибка скачивания {remote_name}: {e}'
+            logging.error(msg)
+            return False, msg
 
     def delete_file(self, remote_name: str) -> bool:
         headers = self._headers()

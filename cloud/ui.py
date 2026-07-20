@@ -384,6 +384,14 @@ class CloudPanel:
         self._result_var.set(summary)
         self._result_label.config(foreground=color)
 
+        if result.errors:
+            err_text = '\n'.join(result.errors)
+            logging.error(f'Sync errors:\n{err_text}')
+            self.root.after(100, lambda: self._show_error_dialog(
+                'Ошибки синхронизации',
+                'При синхронизации произошли ошибки. Скопируйте текст ниже и предоставьте его разработчику:',
+                err_text))
+
         if result.conflicts:
             conflict_names = ', '.join(result.conflicts)
             self.root.after(100, lambda: messagebox.showwarning(

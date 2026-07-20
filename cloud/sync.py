@@ -261,7 +261,8 @@ class SyncManager:
                 with open(tmp_path, 'w', encoding='utf-8') as f:
                     json.dump(upload_data, f, ensure_ascii=False, indent=2)
 
-                if provider.upload_file(tmp_path, remote_name):
+                ok, err = provider.upload_file(tmp_path, remote_name)
+                if ok:
                     meta[name] = {
                         'last_sync': time.time(),
                         'local_mtime': local_mtime,
@@ -269,10 +270,10 @@ class SyncManager:
                     }
                     result.uploaded.append(name)
                 else:
-                    result.errors.append(name)
+                    result.errors.append(f'{name}: {err}')
             except Exception as e:
                 logging.error(f'Upload error {name}: {e}')
-                result.errors.append(name)
+                result.errors.append(f'{name}: {e}')
             finally:
                 try:
                     os.remove(tmp_path)
@@ -313,8 +314,9 @@ class SyncManager:
 
             tmp_path = _local_path('_cloud_download_tmp.json')
             try:
-                if not provider.download_file(remote_name, tmp_path):
-                    result.errors.append(name)
+                ok, err = provider.download_file(remote_name, tmp_path)
+                if not ok:
+                    result.errors.append(f'{name}: {err}')
                     continue
 
                 with open(tmp_path, 'r', encoding='utf-8') as f:
@@ -333,7 +335,7 @@ class SyncManager:
                     result.errors.append(f'{name} (дешифровка)')
             except Exception as e:
                 logging.error(f'Download error {name}: {e}')
-                result.errors.append(name)
+                result.errors.append(f'{name}: {e}')
             finally:
                 try:
                     os.remove(tmp_path)
@@ -390,13 +392,14 @@ class SyncManager:
                 try:
                     with open(tmp_path, 'w', encoding='utf-8') as f:
                         json.dump(upload_data, f, ensure_ascii=False, indent=2)
-                    if provider.upload_file(tmp_path, remote_name_up):
+                    ok, err = provider.upload_file(tmp_path, remote_name_up)
+                    if ok:
                         meta[name] = {'last_sync': time.time(), 'local_mtime': local_mtime, 'remote_name': remote_name_up}
                         result.uploaded.append(name)
                     else:
-                        result.errors.append(name)
+                        result.errors.append(f'{name}: {err}')
                 except Exception as e:
-                    result.errors.append(name)
+                    result.errors.append(f'{name}: {e}')
                 finally:
                     try:
                         os.remove(tmp_path)
@@ -407,7 +410,8 @@ class SyncManager:
             if not has_local and found_remote:
                 tmp_path = _local_path('_cloud_download_tmp.json')
                 try:
-                    if provider.download_file(remote_name, tmp_path):
+                    ok, err = provider.download_file(remote_name, tmp_path)
+                    if ok:
                         with open(tmp_path, 'r', encoding='utf-8') as f:
                             remote_data = json.load(f)
                         final_data = self._prepare_download_data(name, remote_data)
@@ -418,9 +422,9 @@ class SyncManager:
                         else:
                             result.errors.append(f'{name} (дешифровка)')
                     else:
-                        result.errors.append(name)
+                        result.errors.append(f'{name}: {err}')
                 except Exception as e:
-                    result.errors.append(name)
+                    result.errors.append(f'{name}: {e}')
                 finally:
                     try:
                         os.remove(tmp_path)
@@ -452,13 +456,14 @@ class SyncManager:
                 try:
                     with open(tmp_path, 'w', encoding='utf-8') as f:
                         json.dump(upload_data, f, ensure_ascii=False, indent=2)
-                    if provider.upload_file(tmp_path, remote_name_up):
+                    ok, err = provider.upload_file(tmp_path, remote_name_up)
+                    if ok:
                         meta[name] = {'last_sync': time.time(), 'local_mtime': local_mtime, 'remote_name': remote_name_up}
                         result.uploaded.append(name)
                     else:
-                        result.errors.append(name)
+                        result.errors.append(f'{name}: {err}')
                 except Exception:
-                    result.errors.append(name)
+                    result.errors.append(f'{name}: {e}')
                 finally:
                     try:
                         os.remove(tmp_path)
@@ -467,7 +472,8 @@ class SyncManager:
             elif remote_changed and not local_changed:
                 tmp_path = _local_path('_cloud_download_tmp.json')
                 try:
-                    if provider.download_file(remote_name, tmp_path):
+                    ok, err = provider.download_file(remote_name, tmp_path)
+                    if ok:
                         with open(tmp_path, 'r', encoding='utf-8') as f:
                             remote_data = json.load(f)
                         final_data = self._prepare_download_data(name, remote_data)
@@ -478,9 +484,9 @@ class SyncManager:
                         else:
                             result.errors.append(f'{name} (дешифровка)')
                     else:
-                        result.errors.append(name)
+                        result.errors.append(f'{name}: {err}')
                 except Exception:
-                    result.errors.append(name)
+                    result.errors.append(f'{name}: {e}')
                 finally:
                     try:
                         os.remove(tmp_path)
