@@ -14,6 +14,12 @@ from strategy.indicators import calc_atr
 from .metrics import calc_metrics
 
 
+# Порог ликвидности для масштабирования slippage (средний объём ниже = больше slippage)
+SLIPPAGE_LIQUIDITY_THRESHOLD = 1_000_000
+# Окно для расчёта среднего объёма при оценке ликвидности
+SLIPPAGE_VOLUME_WINDOW = 20
+
+
 def candles_to_df(candles_list):
     valid = [c for c in candles_list if c is not None and len(c) > 6]
     if not valid:
@@ -39,6 +45,7 @@ class BacktestEngine:
                  use_mtf_filter=0, mtf_ma_period=20,
                  position_sizing=0, kelly_fraction=0.25, atr_sizing_mult=2.0,
                  exit_assumption=0,
+                 slippage_bps=5,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -68,6 +75,7 @@ class BacktestEngine:
         self.kelly_fraction = max(min(kelly_fraction, 1.0), 0.0)
         self.atr_sizing_mult = max(atr_sizing_mult, 0.5)
         self.exit_assumption = int(exit_assumption)
+        self.slippage_bps = max(int(slippage_bps), 0)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
@@ -111,6 +119,30 @@ class BacktestEngine:
             return 0
         risk_amount = capital * self.risk_per_trade
         return risk_amount / (sl_dist * entry_price)
+
+    def _slippage_factor(self, df, idx):
+        """Calculate slippage multiplier for entry/exit: 0 = none, higher = more slippage.
+
+        Returns (buy_entry_mult, sell_entry_mult, buy_exit_mult, sell_exit_mult)
+        where entry/exit price is multiplied by the corresponding factor.
+        """
+        if self.slippage_bps == 0:
+            return 1.0, 1.0, 1.0, 1.0
+
+        base = self.slippage_bps / 10000.0
+        # Liquidity scaling: below threshold volume -> higher slippage
+        if idx > SLIPPAGE_VOLUME_WINDOW:
+            volumes = df['Volume'].astype(float).iloc[max(0, idx - SLIPPAGE_VOLUME_WINDOW):idx]
+            avg_vol = volumes.mean()
+            if avg_vol > 0 and avg_vol < SLIPPAGE_LIQUIDITY_THRESHOLD:
+                factor = SLIPPAGE_LIQUIDITY_THRESHOLD / avg_vol
+                base = base * factor
+
+        buy_entry  = 1 - base  # BUY entry: slippage makes you buy higher
+        sell_entry = 1 + base  # SELL entry: slippage makes you sell lower
+        buy_exit   = 1 + base  # BUY exit:  slippage makes you sell lower
+        sell_exit  = 1 - base  # SELL exit: slippage makes you buy back higher
+        return buy_entry, sell_entry, buy_exit, sell_exit
 
     def _mtf_allows(self, df, idx, side):
         """Check if higher timeframe trend agrees with signal side."""
@@ -232,6 +264,14 @@ class BacktestEngine:
                     entry_price = level
                 else:
                     entry_price = open_price
+
+                # Apply slippage to entry price
+                be_entry, se_entry, _, _ = self._slippage_factor(df, i)
+                if signal['side'] == 'BUY':
+                    entry_price = entry_price * be_entry
+                else:
+                    entry_price = entry_price * se_entry
+
                 sl = signal['sl_price']
                 sl_dist = abs(entry_price - sl) / entry_price if entry_price != 0 else 0.01
                 if has_atr:
@@ -324,6 +364,12 @@ class BacktestEngine:
                             hit = True
                             exit_tp1 = tp1
                         if hit:
+                            # Apply slippage to partial exit price
+                            _, _, be_exit_ptp, se_exit_ptp = self._slippage_factor(df, i)
+                            if position['side'] == 'BUY':
+                                exit_tp1 = exit_tp1 * be_exit_ptp
+                            else:
+                                exit_tp1 = exit_tp1 * se_exit_ptp
                             close_qty = position['qty'] * self.partial_tp_size1
                             remain_qty = position['qty'] * (1.0 - self.partial_tp_size1)
                             if remain_qty < 0.01 * position['qty']:
@@ -420,6 +466,13 @@ class BacktestEngine:
                     ep = position['entry_price']
                     qty = position['remaining_qty']
 
+                    # Apply slippage to exit price
+                    _, _, be_exit, se_exit = self._slippage_factor(df, i)
+                    if position['side'] == 'BUY':
+                        exit_price = exit_price * be_exit  # BUY exit: sell lower
+                    else:
+                        exit_price = exit_price * se_exit  # SELL exit: buy back higher
+
                     if position['side'] == 'BUY':
                         pnl = (exit_price - ep) * qty
                         pnl_pct = (exit_price / ep - 1) * 100
@@ -462,6 +515,13 @@ class BacktestEngine:
             cl = float(candles_list[-1][1])
             ep = position['entry_price']
             qty = position['remaining_qty']
+
+            # Apply slippage to forced close
+            _, _, be_exit_eod, se_exit_eod = self._slippage_factor(df, len(df) - 1)
+            if position['side'] == 'BUY':
+                cl = cl * be_exit_eod
+            else:
+                cl = cl * se_exit_eod
 
             if position['side'] == 'BUY':
                 pnl = (cl - ep) * qty

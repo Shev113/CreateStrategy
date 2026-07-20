@@ -7,6 +7,8 @@ from backtest.metrics import calc_metrics as calc_daily_metrics
 from intraday.strategies import get_solabuto_strategy
 
 H1_BARS_PER_YEAR = 1764
+SLIPPAGE_LIQUIDITY_THRESHOLD = 1_000_000
+SLIPPAGE_VOLUME_WINDOW = 20
 
 
 def calc_h1_metrics(trades, initial_capital, final_capital, candles_df=None):
@@ -39,6 +41,7 @@ class IntradayEngine:
                  atr_period=14, atr_sl=1.0, atr_tp=2.0,
                  max_hold=20, commission=0.0005, strategy='nr4',
                  entry_type=0, exit_assumption=0,
+                 slippage_bps=5,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -51,9 +54,21 @@ class IntradayEngine:
         self.strategy = strategy
         self.entry_type = entry_type
         self.exit_assumption = int(exit_assumption)
+        self.slippage_bps = max(int(slippage_bps), 0)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self.last_levels = []
+
+    def _slippage_factor(self, df, idx):
+        if self.slippage_bps == 0:
+            return 1.0, 1.0, 1.0, 1.0
+        base = self.slippage_bps / 10000.0
+        if idx > SLIPPAGE_VOLUME_WINDOW:
+            volumes = df['Volume'].astype(float).iloc[max(0, idx - SLIPPAGE_VOLUME_WINDOW):idx]
+            avg_vol = volumes.mean()
+            if avg_vol > 0 and avg_vol < SLIPPAGE_LIQUIDITY_THRESHOLD:
+                base = base * (SLIPPAGE_LIQUIDITY_THRESHOLD / avg_vol)
+        return 1 - base, 1 + base, 1 + base, 1 - base
 
     def _get_signal(self, candles, idx, levels, atr):
         if self._signal_func is None:
@@ -137,6 +152,13 @@ class IntradayEngine:
                     elif (side == 'BUY' and open_price <= level) or (side == 'SELL' and open_price >= level):
                         should_enter = True
                 if should_enter:
+                    # Apply slippage to entry price
+                    be_entry, se_entry, _, _ = self._slippage_factor(df, i)
+                    if side == 'BUY':
+                        entry_price = entry_price * be_entry
+                    else:
+                        entry_price = entry_price * se_entry
+                if should_enter:
                     sl_price = pending_signal['sl_price']
                     tp_price = pending_signal['tp_price']
                     risk_dist = max(abs(entry_price - sl_price), entry_price * 0.001)
@@ -201,6 +223,13 @@ class IntradayEngine:
                     exit_price = cl
                     exit_reason = 'TIMEOUT'
                 if exit_price is not None:
+                    # Apply slippage to exit price
+                    _, _, be_exit, se_exit = self._slippage_factor(df, i)
+                    if position['side'] == 'BUY':
+                        exit_price = exit_price * be_exit
+                    else:
+                        exit_price = exit_price * se_exit
+
                     gross_pnl = (exit_price - position['entry_price']) * position['qty'] if position['side'] == 'BUY' else (position['entry_price'] - exit_price) * position['qty']
                     commission_cost = (position['entry_price'] * position['qty'] + exit_price * position['qty']) * self.commission
                     net_pnl = gross_pnl - commission_cost
