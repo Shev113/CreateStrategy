@@ -85,7 +85,7 @@ class YandexDiskProvider:
                 if not headers:
                     return False, 'Нет токена'
                 resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20, verify=_VERIFY_SSL)
-            if resp.status_code in (200, 201):
+            if resp.status_code in (200, 201, 409):
                 return True, ''
             msg = f'HTTP {resp.status_code}: {resp.text[:200]}'
             logging.error(f'Ensure folder error: {msg}')
