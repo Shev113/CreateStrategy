@@ -2,6 +2,7 @@
 import os
 import csv
 import json
+import random
 from datetime import datetime
 from collections import Counter
 
@@ -37,6 +38,7 @@ class BacktestEngine:
                  use_pivot_levels=0, pivot_lookback=5,
                  use_mtf_filter=0, mtf_ma_period=20,
                  position_sizing=0, kelly_fraction=0.25, atr_sizing_mult=2.0,
+                 exit_assumption=0,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -65,6 +67,7 @@ class BacktestEngine:
         self.position_sizing = position_sizing
         self.kelly_fraction = max(min(kelly_fraction, 1.0), 0.0)
         self.atr_sizing_mult = max(atr_sizing_mult, 0.5)
+        self.exit_assumption = int(exit_assumption)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
@@ -78,9 +81,13 @@ class BacktestEngine:
             return max(qty, 0)
 
         if self.position_sizing == 1:
+            # Kelly Criterion — risk-based sizing.
+            # f_kelly — оптимальная доля капитала по Kelly (теоретическая).
+            # kelly_fraction — срезающий коэффициент (на практике 0.25-0.5).
+            # Размер позиции = (capital * f_kelly * kelly_fraction) / abs(entry - sl)
             wins = [t['pnl'] for t in self._closed_trades if t.get('pnl', 0) > 0]
             losses = [t['pnl'] for t in self._closed_trades if t.get('pnl', 0) < 0]
-            if len(wins) + len(losses) >= 5 and losses:
+            if len(wins) + len(losses) >= 5 and wins and losses:
                 win_rate = len(wins) / (len(wins) + len(losses))
                 avg_win = sum(wins) / len(wins)
                 avg_loss = abs(sum(losses) / len(losses))
@@ -88,8 +95,14 @@ class BacktestEngine:
                 f_kelly = (win_rate * b - (1 - win_rate)) / b
                 f_kelly = max(min(f_kelly, 0.5), 0.01)
             else:
-                f_kelly = self.kelly_fraction
-            qty = (capital * f_kelly) / entry_price
+                # Недостаточно статистики — консервативная оценка
+                # оптимальной доли Kelly (без срезающего коэффициента).
+                f_kelly = 0.25
+            risk_per_share = abs(entry_price - sl_price)
+            if risk_per_share <= 0:
+                return 0
+            risk_amount = capital * f_kelly * self.kelly_fraction
+            qty = risk_amount / risk_per_share
             return max(qty, 0)
 
         # Default: fixed risk
@@ -359,20 +372,45 @@ class BacktestEngine:
                         current_sl = position['trailing_sl']
 
                 if position['remaining_qty'] > 0:
+                    # Determine whether SL and/or TP were touched this bar.
+                    sl_hit = False
+                    tp_hit = False
                     if position['side'] == 'BUY':
                         if l <= current_sl:
-                            exit_price = current_sl
-                            exit_reason = 'SL'
-                        elif h >= position['tp']:
-                            exit_price = position['tp']
-                            exit_reason = 'TP'
+                            sl_hit = True
+                        if h >= position['tp']:
+                            tp_hit = True
                     else:
                         if h >= current_sl:
-                            exit_price = current_sl
-                            exit_reason = 'SL'
-                        elif l <= position['tp']:
+                            sl_hit = True
+                        if l <= position['tp']:
+                            tp_hit = True
+
+                    if sl_hit and tp_hit:
+                        # Ambiguous: both levels in [low, high] of one candle.
+                        # Resolve via exit_assumption parameter.
+                        if self.exit_assumption == 1:
+                            # optimistic: TP wins
                             exit_price = position['tp']
                             exit_reason = 'TP'
+                        elif self.exit_assumption == 2:
+                            # random 50/50
+                            if random.random() < 0.5:
+                                exit_price = current_sl
+                                exit_reason = 'SL'
+                            else:
+                                exit_price = position['tp']
+                                exit_reason = 'TP'
+                        else:
+                            # conservative (default): SL wins
+                            exit_price = current_sl
+                            exit_reason = 'SL'
+                    elif sl_hit:
+                        exit_price = current_sl
+                        exit_reason = 'SL'
+                    elif tp_hit:
+                        exit_price = position['tp']
+                        exit_reason = 'TP'
 
                     if exit_price is None and (i - position['entry_idx']) >= self.max_hold:
                         exit_price = cl

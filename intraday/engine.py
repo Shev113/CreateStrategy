@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import random
 from collections import Counter
 from backtest.engine import candles_to_df, calc_atr, round_to_tolerance
 from backtest.metrics import calc_metrics as calc_daily_metrics
@@ -37,7 +38,8 @@ class IntradayEngine:
     def __init__(self, capital=1_000_000, risk_per_trade=0.02,
                  atr_period=14, atr_sl=1.0, atr_tp=2.0,
                  max_hold=20, commission=0.0005, strategy='nr4',
-                 entry_type=0, **strategy_kwargs):
+                 entry_type=0, exit_assumption=0,
+                 **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
         self.risk_per_trade = risk_per_trade
@@ -48,6 +50,7 @@ class IntradayEngine:
         self.commission = commission
         self.strategy = strategy
         self.entry_type = entry_type
+        self.exit_assumption = int(exit_assumption)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self.last_levels = []
@@ -159,20 +162,41 @@ class IntradayEngine:
                 _, cl, h, l = float(current_candle[0]), float(current_candle[1]), float(current_candle[2]), float(current_candle[3])
                 exit_price = None
                 exit_reason = None
+                sl_hit = False
+                tp_hit = False
                 if position['side'] == 'BUY':
                     if l <= position['sl_price']:
-                        exit_price = position['sl_price']
-                        exit_reason = 'SL'
-                    elif h >= position['tp_price']:
-                        exit_price = position['tp_price']
-                        exit_reason = 'TP'
+                        sl_hit = True
+                    if h >= position['tp_price']:
+                        tp_hit = True
                 else:
                     if h >= position['sl_price']:
-                        exit_price = position['sl_price']
-                        exit_reason = 'SL'
-                    elif l <= position['tp_price']:
+                        sl_hit = True
+                    if l <= position['tp_price']:
+                        tp_hit = True
+
+                if sl_hit and tp_hit:
+                    # Ambiguous: both in [low, high] of one candle.
+                    if self.exit_assumption == 1:
                         exit_price = position['tp_price']
                         exit_reason = 'TP'
+                    elif self.exit_assumption == 2:
+                        if random.random() < 0.5:
+                            exit_price = position['sl_price']
+                            exit_reason = 'SL'
+                        else:
+                            exit_price = position['tp_price']
+                            exit_reason = 'TP'
+                    else:
+                        exit_price = position['sl_price']
+                        exit_reason = 'SL'
+                elif sl_hit:
+                    exit_price = position['sl_price']
+                    exit_reason = 'SL'
+                elif tp_hit:
+                    exit_price = position['tp_price']
+                    exit_reason = 'TP'
+
                 if exit_price is None and (i - position['entry_idx']) >= self.max_hold:
                     exit_price = cl
                     exit_reason = 'TIMEOUT'

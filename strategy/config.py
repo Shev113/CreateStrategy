@@ -38,6 +38,8 @@ EXIT_STRATEGY_PARAMS = [
      'hint': 'Доля от Kelly Criterion (0.0–1.0).\n0.25 = четверть Kelly (консервативно),\n1.0 = полный Kelly (агрессивно)'},
     {'key': 'atr_sizing_mult', 'label': 'ATR-множитель', 'default': 2.0, 'type': float,
      'hint': 'Множитель ATR для волатильного позиционирования.\nВыше ATR = меньше позиция, ниже ATR = больше'},
+    {'key': 'exit_assumption', 'label': 'Предположение SL/TP', 'default': 0, 'type': int,
+     'hint': 'Когда SL и TP попадают в диапазон [low, high] одной свечи:\n0 = консервативный (SL срабатывает первым),\n1 = оптимистичный (TP первым),\n2 = случайный (50/50, усреднение)'},
 ]
 
 STRATEGY_REGISTRY = {

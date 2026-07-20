@@ -22,6 +22,7 @@ class TestConfig(unittest.TestCase):
         keys = [p['key'] for p in params]
         self.assertIn('capital', keys)
         self.assertIn('atr_sl', keys)
+        self.assertIn('exit_assumption', keys)
 
     def test_get_strategy_params_breakout(self):
         params = get_strategy_params('breakout')
@@ -39,7 +40,9 @@ class TestConfig(unittest.TestCase):
         params = get_strategy_params('unknown')
         # Unknown strategy returns only universal exit params
         self.assertTrue(len(params) > 0)
-        self.assertIn('trailing_sl', [p['key'] for p in params])
+        keys = [p['key'] for p in params]
+        self.assertIn('trailing_sl', keys)
+        self.assertIn('exit_assumption', keys)
 
     def test_get_strategy_func_bounce(self):
         func = get_strategy_func('bounce')
