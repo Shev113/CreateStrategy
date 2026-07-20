@@ -237,8 +237,9 @@ class SyncManager:
             result.errors.append('Не подключено к Яндекс.Диску')
             return result
 
-        if not provider.ensure_folder():
-            result.errors.append('Не удалось создать папку на Яндекс.Диске')
+        ok, err = provider.ensure_folder()
+        if not ok:
+            result.errors.append(f'Не удалось создать папку на Яндекс.Диске: {err}')
             return result
 
         meta = _load_cloud_meta()
@@ -351,8 +352,9 @@ class SyncManager:
             result.errors.append('Не подключено к Яндекс.Диску')
             return result
 
-        if not provider.ensure_folder():
-            result.errors.append('Не удалось создать папку на Яндекс.Диске')
+        ok, err = provider.ensure_folder()
+        if not ok:
+            result.errors.append(f'Не удалось создать папку на Яндекс.Диске: {err}')
             return result
 
         remote_files = provider.list_files()

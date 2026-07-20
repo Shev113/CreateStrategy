@@ -68,8 +68,27 @@ class YandexDiskProvider:
     def get_user_info(self) -> dict | None:
         return self._get(f'{_API_BASE}')
 
-    def ensure_folder(self) -> bool:
-        return self._put(f'{_API_BASE}/resources', json_data={'path': _APP_FOLDER})
+    def ensure_folder(self) -> tuple[bool, str]:
+        headers = self._headers()
+        if not headers:
+            return False, 'Нет токена'
+        try:
+            resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20)
+            if resp.status_code == 401:
+                self._token = None
+                headers = self._headers()
+                if not headers:
+                    return False, 'Нет токена'
+                resp = requests.put(f'{_API_BASE}/resources?path={_APP_FOLDER}', headers=headers, timeout=20)
+            if resp.status_code in (200, 201):
+                return True, ''
+            msg = f'HTTP {resp.status_code}: {resp.text[:200]}'
+            logging.error(f'Ensure folder error: {msg}')
+            return False, msg
+        except Exception as e:
+            msg = f'Ошибка создания папки: {e}'
+            logging.error(msg)
+            return False, msg
 
     def list_files(self) -> dict[str, dict] | None:
         data = self._get(f'{_API_BASE}/resources', params={'path': _APP_FOLDER, 'limit': 100})
