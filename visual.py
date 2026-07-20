@@ -563,9 +563,29 @@ class StockAppVisual:
             f"Max Drawdown:       -{metrics['max_drawdown']:.2f} %",
             f"Sharpe Ratio:       {metrics['sharpe']}",
             "",
-            f"Средняя прибыль:    {metrics['avg_win']:+.2f} руб" if metrics.get('avg_win') else "",
-            f"Средний убыток:     {metrics['avg_loss']:+.2f} руб" if metrics.get('avg_loss') else "",
         ]
+        # Advanced metrics (only when include_advanced was used upstream).
+        sortino = metrics.get('sortino')
+        calmar = metrics.get('calmar')
+        var_95 = metrics.get('var_95')
+        cvar_95 = metrics.get('cvar_95')
+        ulcer = metrics.get('ulcer_index')
+        if any(v is not None for v in (sortino, calmar, var_95, cvar_95, ulcer)):
+            lines.append("-- Риск-метрики --")
+            if sortino is not None:
+                lines.append(f"Sortino Ratio:      {sortino}")
+            if calmar is not None:
+                lines.append(f"Calmar Ratio:       {calmar}")
+            if var_95 is not None:
+                lines.append(f"VaR (95%):          {var_95:+.2f} %")
+            if cvar_95 is not None:
+                lines.append(f"CVaR (95%):         {cvar_95:+.2f} %")
+            if ulcer is not None:
+                lines.append(f"Ulcer Index:        {ulcer:.2f}")
+            lines.append("")
+
+        lines.append(f"Средняя прибыль:    {metrics['avg_win']:+,.2f} руб" if metrics.get('avg_win') else "")
+        lines.append(f"Средний убыток:     {metrics['avg_loss']:+,.2f} руб" if metrics.get('avg_loss') else "")
         if params:
             capital = params.get('capital', 1_000_000)
             risk = params.get('risk_per_trade', 0.02)

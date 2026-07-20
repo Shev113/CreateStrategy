@@ -8,8 +8,22 @@ from intraday.strategies import get_solabuto_strategy
 H1_BARS_PER_YEAR = 1764
 
 
-def calc_h1_metrics(trades, initial_capital, final_capital):
-    metrics = dict(calc_daily_metrics(trades, initial_capital, final_capital))
+def calc_h1_metrics(trades, initial_capital, final_capital, candles_df=None):
+    """Intraday metrics.
+
+    If candles_df is supplied (hourly candles), Sharpe / MaxDD are
+    computed on a daily-aggregated mark-to-market equity curve and
+    annualised by sqrt(252). Otherwise falls back to trades-based
+    equity with H1_BARS_PER_YEAR annualisation (legacy behaviour).
+    """
+    if candles_df is not None and len(candles_df) > 0:
+        metrics = dict(calc_daily_metrics(
+            trades, initial_capital, final_capital,
+            candles_df=candles_df, include_advanced=True))
+        return metrics
+
+    metrics = dict(calc_daily_metrics(
+        trades, initial_capital, final_capital, include_advanced=True))
     returns = [t.get('pnl', 0) / initial_capital for t in trades if t.get('pnl') is not None]
     if len(returns) > 1:
         std = np.std(returns, ddof=1)
@@ -70,7 +84,8 @@ class IntradayEngine:
                 valid = fixed
                 continue
         if df is None or len(df) < self.atr_period + 5:
-            return [], calc_h1_metrics([], self.initial_capital, self.capital)
+            return [], calc_h1_metrics(
+                [], self.initial_capital, self.capital, candles_df=df)
 
         atr_series = calc_atr(df, self.atr_period)
         tolerance = self.tolerance if hasattr(self, 'tolerance') and self.tolerance else None
@@ -129,6 +144,7 @@ class IntradayEngine:
                         'sl_price': sl_price,
                         'tp_price': tp_price,
                         'entry_idx': i,
+                        'entry_date': df.index[i],
                         'qty': qty,
                         'pnl': 0,
                         'exit_price': None,
@@ -169,6 +185,7 @@ class IntradayEngine:
                     position['exit_price'] = exit_price
                     position['exit_reason'] = exit_reason
                     position['exit_idx'] = i
+                    position['exit_date'] = df.index[i]
                     self.capital += net_pnl
                     trades.append(dict(position))
                     position = None
@@ -178,5 +195,6 @@ class IntradayEngine:
                 if signal:
                     pending_signal = signal
 
-        metrics = calc_h1_metrics(trades, self.initial_capital, self.capital)
+        metrics = calc_h1_metrics(
+            trades, self.initial_capital, self.capital, candles_df=df)
         return trades, metrics

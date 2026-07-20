@@ -137,7 +137,9 @@ class BacktestEngine:
     def run(self, candles_list):
         df = candles_to_df(candles_list)
         if df is None or len(df) < self.atr_period + 5:
-            return [], calc_metrics([], self.initial_capital, self.capital)
+            return [], calc_metrics(
+                [], self.initial_capital, self.capital,
+                candles_df=df, include_advanced=True)
 
         atr_series = calc_atr(df, self.atr_period)
 
@@ -456,7 +458,9 @@ class BacktestEngine:
             self._final_levels = list(set(freq_sorted) | set(sorted(pivot_levels)[:6]))
         else:
             self._final_levels = freq_sorted
-        metrics = calc_metrics(trades, self.initial_capital, self.capital)
+        metrics = calc_metrics(
+            trades, self.initial_capital, self.capital,
+            candles_df=df, include_advanced=True)
         return trades, metrics
 
     @property

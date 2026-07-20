@@ -6,6 +6,10 @@ from datetime import datetime
 
 from .engine import BacktestEngine, candles_to_df
 from .portfolio_risk import PortfolioRiskManager
+from .metrics import (
+    _max_drawdown_from_equity, _sharpe_from_daily_returns,
+    _daily_returns_from_equity,
+)
 
 
 def run_portfolio(portfolio_data, capital=1_000_000, risk_manager=None, **engine_kwargs):
@@ -201,14 +205,19 @@ def _calc_portfolio_metrics(trades, initial_capital, final_capital):
     win_rate = len(wins) / len(trades) * 100 if trades else 0
     profit_factor = (sum(wins) / abs(sum(losses))) if losses and sum(losses) != 0 else (float('inf') if wins else 0)
 
-    # Build equity curve from chronologically sorted trades
+    # Build equity curve from chronologically sorted trades (no candles_df
+    # available at portfolio level — fallback to trades-based equity).
     sorted_trades = sorted(trades, key=lambda t: (t.get('exit_date', ''), t.get('entry_date', '')))
-    equity = [initial_capital]
-    for t in sorted_trades:
-        equity.append(equity[-1] + t.get('pnl', 0))
+    equity = np.array([initial_capital] + [initial_capital], dtype=float)
+    if sorted_trades:
+        eq_list = [float(initial_capital)]
+        for t in sorted_trades:
+            eq_list.append(eq_list[-1] + t.get('pnl', 0))
+        equity = np.array(eq_list, dtype=float)
 
-    dd = _max_drawdown(equity)
-    sharpe = _sharpe_ratio(sorted_trades)
+    dd = _max_drawdown_from_equity(equity)
+    daily_returns = _daily_returns_from_equity(equity)
+    sharpe = _sharpe_from_daily_returns(daily_returns)
 
     return {
         'total_return': round(total_return, 2),
@@ -224,22 +233,17 @@ def _calc_portfolio_metrics(trades, initial_capital, final_capital):
 
 
 def _max_drawdown(equity):
-    if len(equity) < 2:
-        return 0
-    peak = equity[0]
-    dd = 0
-    for v in equity[1:]:
-        if v > peak:
-            peak = v
-        dd = max(dd, (peak - v) / peak * 100)
-    return dd
+    # Kept for backward compatibility with any external callers.
+    return _max_drawdown_from_equity(equity)
 
 
 def _sharpe_ratio(trades, trading_days=252):
+    # Kept for backward compatibility with any external callers.
     pnl_pcts = [t.get('pnl_pct', 0) for t in trades if t.get('pnl_pct') is not None]
-    if len(pnl_pcts) < 2 or np.std(pnl_pcts) == 0:
+    if len(pnl_pcts) < 2:
         return 0
-    return float(np.mean(pnl_pcts) / np.std(pnl_pcts) * np.sqrt(trading_days))
+    eq = np.cumsum([0.0] + pnl_pcts)
+    return _sharpe_from_daily_returns(_daily_returns_from_equity(eq), trading_days)
 
 
 def _empty_metrics(capital):
