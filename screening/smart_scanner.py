@@ -133,6 +133,14 @@ class SmartScanner:
 
                     try:
                         trades, metrics = engine.run(stock_data)
+                    except ModuleNotFoundError as e:
+                        logging.error(
+                            'SmartScanner: STRATEGY %s unavailable in bundle — '
+                            'check PyInstaller hiddenimports. ticker=%s err=%s',
+                            sid, ticker, e,
+                        )
+                        metrics = {}
+                        trades = []
                     except Exception as e:
                         logging.warning(f'SmartScanner: {ticker} strategy={sid} engine.run() failed: {e}')
                         metrics = {}

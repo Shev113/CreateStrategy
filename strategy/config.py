@@ -1154,6 +1154,10 @@ def get_strategy_params(strategy_id):
 
 
 def get_strategy_func(strategy_id):
+    import importlib
+    import logging
+    import sys
+
     registry = STRATEGY_REGISTRY.get(strategy_id)
     if not registry:
         return None
@@ -1161,8 +1165,15 @@ def get_strategy_func(strategy_id):
     if ':' not in path:
         return None
     module_path, func_name = path.split(':')
-    import importlib
-    module = importlib.import_module(module_path)
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as e:
+        logging.getLogger(__name__).error(
+            'get_strategy_func: cannot import module=%r strategy_id=%r '
+            'sys.path=%r error=%r',
+            module_path, strategy_id, sys.path, e,
+        )
+        raise
     return getattr(module, func_name)
 
 
