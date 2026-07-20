@@ -135,21 +135,16 @@ def _build_param_grid(strategy_id):
 
 
 def score_result(metrics):
-    sharpe = max(metrics.get('sharpe', 0), 0)
-    pf = metrics.get('profit_factor', 0)
-    ret = metrics.get('total_return', 0)
     trades = metrics.get('total_trades', 0)
-    dd = max(metrics.get('max_drawdown', 0), 0.01)
-    win_rate = metrics.get('win_rate', 0)
-
-    if trades < 5:
+    if trades < 30:
         return -1
 
-    ret_adj = max(ret, -100)
-    score = sharpe * pf * ((ret_adj + 100) / 100) / (dd + 5)
-    if win_rate > 0 and pf > 0:
-        score *= (win_rate / 100) * pf
-    return round(score, 4)
+    sharpe = max(metrics.get('sharpe', 0), 0)
+    pf = max(metrics.get('profit_factor', 0), 0)
+    dd = max(metrics.get('max_drawdown', 0), 0)
+
+    import math
+    return round(sharpe * 0.40 + math.log(pf + 1) * 0.30 - dd * 0.30, 4)
 
 
 def optimize(strategy_id, candles_list, default_params=None, metric='composite', progress_fn=None):
