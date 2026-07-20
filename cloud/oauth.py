@@ -196,3 +196,14 @@ def start_oauth_flow(callback=None, redirect_uri: str = None) -> bool:
         callback(token_data)
 
     return token_data is not None
+
+
+def manual_code_flow(verification_code: str, redirect_uri: str = None) -> bool:
+    if not _client_id or not _client_secret:
+        logging.error('OAuth client_id/client_secret not set')
+        return False
+    if not verification_code:
+        logging.error('Verification code is empty')
+        return False
+    token_data = exchange_code_for_token(verification_code, redirect_uri=redirect_uri)
+    return token_data is not None

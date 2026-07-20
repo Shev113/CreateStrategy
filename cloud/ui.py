@@ -6,7 +6,7 @@ import webbrowser
 from tkinter import ttk, messagebox
 
 from cloud.sync import sync_manager, get_sync_files, is_encrypted_file, _load_cloud_meta
-from cloud.oauth import start_oauth_flow, get_valid_token, load_token, delete_token, set_oauth_app
+from cloud.oauth import start_oauth_flow, manual_code_flow, get_valid_token, load_token, delete_token, set_oauth_app
 
 
 class CloudPanel:
@@ -69,22 +69,34 @@ class CloudPanel:
                    command=lambda: self._paste_to(self._redirect_uri_var)).grid(
             row=2, column=2, padx=(3, 0), pady=2)
 
-        ttk.Label(settings_frame, text='Пароль шифрования:').grid(row=4, column=0, sticky='w', pady=2)
+        ttk.Label(settings_frame, text='Код подтверждения:').grid(row=3, column=0, sticky='w', pady=2)
+        code_frame = ttk.Frame(settings_frame)
+        code_frame.grid(row=3, column=1, sticky='ew', padx=(5, 0), pady=2)
+        self._code_var = tk.StringVar()
+        code_entry = ttk.Entry(code_frame, textvariable=self._code_var, width=30)
+        code_entry.pack(side='left', fill='x', expand=True)
+        ttk.Button(code_frame, text='Вставить',
+                   command=lambda: self._paste_to(self._code_var)).pack(side='left', padx=(3, 0))
+        self._connect_code_btn = ttk.Button(code_frame, text='Подключить по коду',
+                                            command=self._on_connect_manual)
+        self._connect_code_btn.pack(side='left', padx=(3, 0))
+
+        ttk.Label(settings_frame, text='Пароль шифрования:').grid(row=5, column=0, sticky='w', pady=2)
         self._password_var = tk.StringVar(value=sync_manager.sync_password)
         ttk.Entry(settings_frame, textvariable=self._password_var, width=45,
-                  show='*').grid(row=4, column=1, sticky='ew', padx=(5, 0), pady=2)
+                  show='*').grid(row=5, column=1, sticky='ew', padx=(5, 0), pady=2)
         ttk.Button(settings_frame, text='Вставить',
                    command=lambda: self._paste_to(self._password_var)).grid(
-            row=4, column=2, padx=(3, 0), pady=2)
+            row=5, column=2, padx=(3, 0), pady=2)
 
         self._auto_sync_var = tk.BooleanVar(value=sync_manager.auto_sync_on_close)
         ttk.Checkbutton(settings_frame, text='Автосинк при закрытии приложения',
                          variable=self._auto_sync_var).grid(
-            row=4, column=0, columnspan=2, sticky='w', pady=(5, 0))
+            row=5, column=0, columnspan=2, sticky='w', pady=(5, 0))
 
         ttk.Button(settings_frame, text='Сохранить настройки',
                     command=self._save_settings).grid(
-            row=5, column=0, columnspan=2, pady=(10, 0))
+            row=6, column=0, columnspan=2, pady=(10, 0))
 
         settings_frame.columnconfigure(1, weight=1)
 
@@ -164,6 +176,7 @@ class CloudPanel:
         if token and token.get('access_token'):
             self._status_var.set('Подключено к Яндекс.Диску')
             self._connect_btn.config(state='disabled')
+            self._connect_code_btn.config(state='disabled')
             self._disconnect_btn.config(state='normal')
             self._upload_btn.config(state='normal')
             self._download_btn.config(state='normal')
@@ -171,6 +184,7 @@ class CloudPanel:
         else:
             self._status_var.set('Не подключено')
             self._connect_btn.config(state='normal')
+            self._connect_code_btn.config(state='normal')
             self._disconnect_btn.config(state='disabled')
             self._upload_btn.config(state='disabled')
             self._download_btn.config(state='disabled')
@@ -222,6 +236,35 @@ class CloudPanel:
         self._status_var.set('Ожидание авторизации...')
         self._connect_btn.config(state='disabled')
 
+    def _on_connect_manual(self):
+        cid = self._client_id_var.get().strip()
+        csecret = self._client_secret_var.get().strip()
+        if not cid or not csecret:
+            messagebox.showwarning('Внимание',
+                                    'Укажите Client ID и Client Secret в настройках')
+            return
+
+        code = self._code_var.get().strip()
+        if not code:
+            messagebox.showwarning('Внимание',
+                                    'Введите код подтверждения')
+            return
+
+        self._save_settings()
+
+        def do_connect():
+            try:
+                set_oauth_app(cid, csecret)
+                result = manual_code_flow(code, redirect_uri=self._redirect_uri_var.get().strip())
+                self.root.after(0, self._on_connect_done, result)
+            except Exception as e:
+                logging.error(f'Manual OAuth error: {e}')
+                self.root.after(0, self._on_connect_done, False)
+
+        threading.Thread(target=do_connect, daemon=True).start()
+        self._status_var.set('Подключение по коду...')
+        self._connect_code_btn.config(state='disabled')
+
     def _on_connect_done(self, success):
         if success:
             self._status_var.set('Подключено к Яндекс.Диску')
@@ -233,6 +276,7 @@ class CloudPanel:
         else:
             self._status_var.set('Авторизация не удалась')
             self._connect_btn.config(state='normal')
+            self._connect_code_btn.config(state='normal')
         self._refresh_files_list()
 
     def _on_disconnect(self):
