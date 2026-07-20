@@ -9,19 +9,18 @@ from cloud.sync import sync_manager, get_sync_files, is_encrypted_file, _load_cl
 from cloud.oauth import start_oauth_flow, get_valid_token, load_token, delete_token, set_oauth_app
 
 
-def _paste_to(var):
-    try:
-        text = var.root.clipboard_get()
-        var.set(text)
-    except tk.TclError:
-        pass
-
-
 class CloudPanel:
     def __init__(self, parent, root):
         self.root = root
         self._syncing = False
         self._build_ui(parent)
+
+    def _paste_to(self, var):
+        try:
+            text = self.root.clipboard_get()
+            var.set(text)
+        except tk.TclError:
+            pass
 
     def _build_ui(self, parent):
         main = ttk.Frame(parent, padding=10)
@@ -51,7 +50,7 @@ class CloudPanel:
         ttk.Entry(settings_frame, textvariable=self._client_id_var, width=45).grid(
             row=0, column=1, sticky='ew', padx=(5, 0), pady=2)
         ttk.Button(settings_frame, text='Вставить',
-                   command=lambda: _paste_to(self._client_id_var)).grid(
+                   command=lambda: self._paste_to(self._client_id_var)).grid(
             row=0, column=2, padx=(3, 0), pady=2)
 
         ttk.Label(settings_frame, text='Client Secret:').grid(row=1, column=0, sticky='w', pady=2)
@@ -59,7 +58,7 @@ class CloudPanel:
         ttk.Entry(settings_frame, textvariable=self._client_secret_var, width=45,
                   show='*').grid(row=1, column=1, sticky='ew', padx=(5, 0), pady=2)
         ttk.Button(settings_frame, text='Вставить',
-                   command=lambda: _paste_to(self._client_secret_var)).grid(
+                   command=lambda: self._paste_to(self._client_secret_var)).grid(
             row=1, column=2, padx=(3, 0), pady=2)
 
         ttk.Label(settings_frame, text='Redirect URI:').grid(row=2, column=0, sticky='w', pady=2)
@@ -67,7 +66,7 @@ class CloudPanel:
         ttk.Entry(settings_frame, textvariable=self._redirect_uri_var, width=45).grid(
             row=2, column=1, sticky='ew', padx=(5, 0), pady=2)
         ttk.Button(settings_frame, text='Вставить',
-                   command=lambda: _paste_to(self._redirect_uri_var)).grid(
+                   command=lambda: self._paste_to(self._redirect_uri_var)).grid(
             row=2, column=2, padx=(3, 0), pady=2)
 
         ttk.Label(settings_frame, text='Пароль шифрования:').grid(row=4, column=0, sticky='w', pady=2)
@@ -75,7 +74,7 @@ class CloudPanel:
         ttk.Entry(settings_frame, textvariable=self._password_var, width=45,
                   show='*').grid(row=4, column=1, sticky='ew', padx=(5, 0), pady=2)
         ttk.Button(settings_frame, text='Вставить',
-                   command=lambda: _paste_to(self._password_var)).grid(
+                   command=lambda: self._paste_to(self._password_var)).grid(
             row=4, column=2, padx=(3, 0), pady=2)
 
         self._auto_sync_var = tk.BooleanVar(value=sync_manager.auto_sync_on_close)
