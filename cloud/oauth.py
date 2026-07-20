@@ -159,29 +159,47 @@ def start_oauth_flow(callback=None, redirect_uri: str = None) -> bool:
     _OAuthHandler.auth_code = None
     if not redirect_uri:
         redirect_uri = _DEFAULT_REDIRECT_URI
+
+    base_port = _DEFAULT_REDIRECT_PORT
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(redirect_uri)
+        if parsed.port:
+            base_port = parsed.port
+    except Exception:
+        pass
+
+    server = None
+    chosen_port = base_port
+    for port in range(base_port, base_port + 10):
+        try:
+            server = HTTPServer(('127.0.0.1', port), _OAuthHandler)
+            server.timeout = 120
+            chosen_port = port
+            break
+        except OSError:
+            continue
+
+    if server is None:
+        # Ни один порт не свободен — открываем браузер без локального сервера,
+        # пользователь скопирует code из адресной строки вручную
+        auth_url = (
+            f'{_OAUTH_URL}?response_type=code'
+            f'&client_id={_client_id}'
+            f'&redirect_uri={redirect_uri}'
+        )
+        webbrowser.open(auth_url)
+        return False
+
+    # Обновляем redirect_uri с реально занятым портом (если отличается)
+    if chosen_port != base_port:
+        redirect_uri = f'http://localhost:{chosen_port}'
+
     auth_url = (
         f'{_OAUTH_URL}?response_type=code'
         f'&client_id={_client_id}'
         f'&redirect_uri={redirect_uri}'
     )
-
-    server = None
-    parsed_port = _DEFAULT_REDIRECT_PORT
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(redirect_uri)
-        if parsed.port:
-            parsed_port = parsed.port
-    except Exception:
-        pass
-
-    try:
-        server = HTTPServer(('127.0.0.1', parsed_port), _OAuthHandler)
-        server.timeout = 120
-    except OSError:
-        webbrowser.open(auth_url)
-        return False
-
     webbrowser.open(auth_url)
 
     server.handle_request()

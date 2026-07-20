@@ -6,7 +6,7 @@ import webbrowser
 from tkinter import ttk, messagebox
 
 from cloud.sync import sync_manager, get_sync_files, is_encrypted_file, _load_cloud_meta
-from cloud.oauth import start_oauth_flow, manual_code_flow, get_valid_token, load_token, delete_token, set_oauth_app
+from cloud.oauth import start_oauth_flow, manual_code_flow, get_valid_token, load_token, delete_token
 
 
 class CloudPanel:
@@ -112,11 +112,15 @@ class CloudPanel:
         link1.pack(side='left')
         link1.bind('<Button-1>', lambda e: self._open_url('https://oauth.yandex.ru/'))
 
-        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы), укажите Redirect URI как в настройках выше',
+        ttk.Label(help_frame, text='2. Зарегистрируйте приложение (Веб-сервисы), укажите Redirect URI: http://localhost:9876',
                   font=('Segoe UI', 9), foreground='gray', justify='left').pack(anchor='w')
         ttk.Label(help_frame, text='3. Дайте доступ: Яндекс.Диск (чтение/запись)',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
         ttk.Label(help_frame, text='4. Скопируйте Client ID и Client Secret выше',
+                  font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
+        ttk.Label(help_frame, text='5. Нажмите "Подключить". Если автоавторизация не сработала —',
+                  font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
+        ttk.Label(help_frame, text='   вставьте код из адресной строки в поле "Код подтверждения"',
                   font=('Segoe UI', 9), foreground='gray').pack(anchor='w')
 
         actions_frame = ttk.LabelFrame(main, text='Синхронизация', padding=10)
@@ -254,7 +258,6 @@ class CloudPanel:
 
         def do_connect():
             try:
-                set_oauth_app(cid, csecret)
                 result = manual_code_flow(code, redirect_uri=self._redirect_uri_var.get().strip())
                 self.root.after(0, self._on_connect_done, result)
             except Exception as e:
@@ -277,6 +280,11 @@ class CloudPanel:
             self._status_var.set('Авторизация не удалась')
             self._connect_btn.config(state='normal')
             self._connect_code_btn.config(state='normal')
+            messagebox.showinfo(
+                'Авторизация',
+                'Не удалось выполнить автоматическую авторизацию.\n\n'
+                'Скопируйте код из адресной строки браузера (параметр ?code=...)\n'
+                'и вставьте его в поле "Код подтверждения", затем нажмите "Подключить по коду".')
         self._refresh_files_list()
 
     def _on_disconnect(self):
