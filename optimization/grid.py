@@ -147,7 +147,7 @@ def score_result(metrics):
     return round(sharpe * 0.40 + math.log(pf + 1) * 0.30 - dd * 0.30, 4)
 
 
-def optimize(strategy_id, candles_list, default_params=None, metric='composite', progress_fn=None):
+def optimize(strategy_id, candles_list, default_params=None, metric='composite', progress_fn=None, oos_split=0.2):
     grid = _build_param_grid(strategy_id)
     keys = list(grid.keys())
     value_lists = [grid[k] for k in keys]
@@ -166,6 +166,11 @@ def optimize(strategy_id, candles_list, default_params=None, metric='composite',
             base_params['commission'] = base_params['commission'] / 100.0
     base_params['strategy'] = strategy_id
 
+    # IS/OOS split
+    split_idx = int(len(candles_list) * (1 - oos_split))
+    is_candles = candles_list[:split_idx]
+    oos_candles = candles_list[split_idx:]
+
     results = []
     idx = 0
     for combo in itertools.product(*value_lists):
@@ -174,7 +179,7 @@ def optimize(strategy_id, candles_list, default_params=None, metric='composite',
             params[k] = v
 
         engine = BacktestEngine(**params)
-        trades, metrics = engine.run(candles_list)
+        trades, metrics = engine.run(is_candles)
 
         sc = score_result(metrics)
         if sc >= 0:
@@ -194,4 +199,24 @@ def optimize(strategy_id, candles_list, default_params=None, metric='composite',
             progress_fn(idx, total)
 
     results.sort(key=lambda r: r['score'], reverse=True)
-    return results[:50], total
+    top = results[:50]
+
+    # OOS validation for top results
+    if oos_candles and len(oos_candles) >= 30:
+        for r in top:
+            params = dict(base_params)
+            params.update(r['params'])
+            engine = BacktestEngine(**params)
+            _, oos_metrics = engine.run(oos_candles)
+            oos_sc = score_result(oos_metrics)
+            r['oos_sharpe'] = round(oos_metrics.get('sharpe', 0), 2)
+            r['oos_return'] = round(oos_metrics.get('total_return', 0), 2)
+            r['oos_drawdown'] = round(oos_metrics.get('max_drawdown', 0), 2)
+            r['oos_trades'] = oos_metrics.get('total_trades', 0)
+            r['oos_score'] = oos_sc
+            if r['score'] > 0:
+                r['degradation'] = round(max(0, 1 - oos_sc / r['score']), 4)
+            else:
+                r['degradation'] = 1.0
+
+    return top, total

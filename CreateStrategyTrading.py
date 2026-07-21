@@ -1168,17 +1168,31 @@ class CreateStrategyApp:
                 f"  Доходность:   {best['total_return']:+.2f}%\n"
                 f"  Max Drawdown: -{best['max_drawdown']:.2f}%\n"
                 f"  Сделок:       {best['total_trades']}\n"
-                f"  Win Rate:     {best['win_rate']:.1f}%\n\n"
+                f"  Win Rate:     {best['win_rate']:.1f}%\n"
             ))
+            if 'oos_sharpe' in best:
+                degrad = best.get('degradation', 1) * 100
+                txt.insert(tk.END, (
+                    f"\n  ── OOS (Out-Of-Sample) ──\n"
+                    f"  OOS Sharpe:   {best['oos_sharpe']:.2f}\n"
+                    f"  OOS Return:   {best['oos_return']:+.2f}%\n"
+                    f"  OOS Drawdown: -{best['oos_drawdown']:.2f}%\n"
+                    f"  OOS Сделок:   {best['oos_trades']}\n"
+                    f"  Деградация:   {degrad:.0f}%\n"
+                ))
+            txt.insert(tk.END, "\n")
             txt.insert(tk.END, "── Топ-5 комбинаций (нажмите [Применить]) ──\n")
             for rank, r in enumerate(results[:5], 1):
                 param_str = ", ".join(f"{k}={v}" for k, v in r['params'].items())
                 txt.insert(tk.END, f"  {rank}. ")
                 tag_name = f"apply_{rank - 1}"
                 txt.insert(tk.END, "[Применить] ", (tag_name,))
+                oos_info = ""
+                if 'oos_sharpe' in r:
+                    oos_info = f" OOS:{r['oos_sharpe']:.2f}/{r['oos_return']:+.0f}% D:{r.get('degradation', 1)*100:.0f}%"
                 txt.insert(tk.END, (
                     f"Sharpe={r['sharpe']:.2f} PF={r['profit_factor']:.2f} "
-                    f"Ret={r['total_return']:+.1f}% | {param_str}\n"
+                    f"Ret={r['total_return']:+.1f}%{oos_info} | {param_str}\n"
                 ))
                 txt.tag_config(tag_name, foreground='blue', underline=1)
                 txt.tag_bind(tag_name, '<Button-1>',
