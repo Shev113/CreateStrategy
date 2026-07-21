@@ -108,7 +108,8 @@ class TestCheckCandleHit(unittest.TestCase):
     def test_short_sl_hit(self):
         candles = [
             [100, 101, 102, 99],
-            [100, 102, 106, 101],
+            [100, 102, 103, 98],  # l=98 <= entry=100, h=103 >= sl=105? нет
+            [100, 103, 106, 97],  # l=97 <= entry=100, h=106 >= sl=105
         ]
         reason, price = check_candle_hit(100, 105, 95, 'SHORT', candles)
         self.assertEqual(reason, 'SL')

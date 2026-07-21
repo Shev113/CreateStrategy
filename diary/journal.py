@@ -70,7 +70,7 @@ def check_candle_hit(entry_price, sl_price, tp_price, side, candles):
             if c is None or len(c) < 4:
                 continue
             _, _, h, l = float(c[0]), float(c[1]), float(c[2]), float(c[3])
-            if l <= sl_price:
+            if h >= entry_price and l <= sl_price:
                 return 'SL', sl_price
             if h >= tp_price:
                 return 'TP', tp_price
@@ -79,7 +79,7 @@ def check_candle_hit(entry_price, sl_price, tp_price, side, candles):
             if c is None or len(c) < 4:
                 continue
             _, _, h, l = float(c[0]), float(c[1]), float(c[2]), float(c[3])
-            if h >= sl_price:
+            if l <= entry_price and h >= sl_price:
                 return 'SL', sl_price
             if l <= tp_price:
                 return 'TP', tp_price

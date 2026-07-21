@@ -197,12 +197,12 @@ class IntradayEngine:
                 sl_hit = False
                 tp_hit = False
                 if position['side'] == 'BUY':
-                    if l <= position['sl_price']:
+                    if h >= position['entry_price'] and l <= position['sl_price']:
                         sl_hit = True
                     if h >= position['tp_price']:
                         tp_hit = True
                 else:
-                    if h >= position['sl_price']:
+                    if l <= position['entry_price'] and h >= position['sl_price']:
                         sl_hit = True
                     if l <= position['tp_price']:
                         tp_hit = True

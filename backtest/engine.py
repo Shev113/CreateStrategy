@@ -462,16 +462,16 @@ class BacktestEngine:
                         current_sl = position['trailing_sl']
 
                 if position['remaining_qty'] > 0:
-                    # Determine whether SL and/or TP were touched this bar.
                     sl_hit = False
                     tp_hit = False
+                    ep = position['entry_price']
                     if position['side'] == 'BUY':
-                        if l <= current_sl:
+                        if h >= ep and l <= current_sl:
                             sl_hit = True
                         if h >= position['tp']:
                             tp_hit = True
                     else:
-                        if h >= current_sl:
+                        if l <= ep and h >= current_sl:
                             sl_hit = True
                         if l <= position['tp']:
                             tp_hit = True
