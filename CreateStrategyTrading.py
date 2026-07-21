@@ -337,6 +337,7 @@ class CreateStrategyApp:
             on_walkforward=self.on_walkforward,
             on_sensitivity=self.on_sensitivity,
             on_fundamental=self._on_fundamental,
+            on_heatmap=self.on_heatmap,
             favorites=self._favorites,
             on_toggle_favorite=self._on_toggle_favorite,
             sector_db=self.sector_db,
@@ -1352,6 +1353,101 @@ class CreateStrategyApp:
     def _on_sensitivity_error(self, error_msg):
         self.app.add_backtest_result(f"Ошибка анализа чувствительности: {error_msg}")
         self.app.sensitivity_button.config(state='normal', text='6. Чувств.')
+
+    def on_heatmap(self) -> None:
+        """2D Sensitivity Heatmap: открывает окно выбора двух параметров."""
+        if self.state.stock_data is None or not isinstance(self.state.stock_data, list):
+            self.app.add_backtest_result("Ошибка: сначала загрузите данные (кнопка 1)")
+            return
+        if len(self.state.stock_data) < MIN_CANDLES_FOR_BACKTEST:
+            self.app.add_backtest_result("Ошибка: слишком мало данных (нужно >= 30 свечей)")
+            return
+
+        try:
+            import tkinter as tk
+            from tkinter import ttk
+        except ImportError:
+            self.app.add_backtest_result("Ошибка: tkinter недоступен")
+            return
+
+        params = self.app.get_backtest_params()
+        if params is None:
+            self.app.add_backtest_result("Ошибка: проверьте числовые параметры.")
+            return
+
+        strategy_id = params.pop('strategy', 'bounce')
+
+        # Build param list from strategy config
+        from strategy.config import get_strategy_params
+        sp = get_strategy_params(strategy_id)
+        tunable = [p['key'] for p in sp
+                   if p['key'] not in ('strategy', 'capital', 'risk_per_trade',
+                                        'commission', 'entry_type', 'use_pivot_levels',
+                                        'use_mtf_filter', 'position_sizing',
+                                        'trailing_sl', 'partial_tp')
+                   and p.get('type') in (int, float)]
+        # keep only those that are in params and non-zero
+        tunable = [k for k in tunable if k in params and params.get(k, 0) != 0]
+        if not tunable:
+            self.app.add_backtest_result("Нет варьируемых параметров.")
+            return
+
+        # Dialog window
+        win = tk.Toplevel(self.root)
+        win.title('Heatmap параметров')
+        win.geometry('400x300')
+        win.transient(self.root)
+        win.grab_set()
+
+        ttk.Label(win, text='Параметр X:').pack(pady=(15, 2))
+        var_x = tk.StringVar(value=tunable[0])
+        cx = ttk.Combobox(win, textvariable=var_x, values=tunable, state='readonly')
+        cx.pack(fill='x', padx=20)
+
+        ttk.Label(win, text='Параметр Y:').pack(pady=(10, 2))
+        var_y = tk.StringVar(value=tunable[1] if len(tunable) > 1 else tunable[0])
+        cy = ttk.Combobox(win, textvariable=var_y, values=tunable, state='readonly')
+        cy.pack(fill='x', padx=20)
+
+        ttk.Label(win, text='Метрика:').pack(pady=(10, 2))
+        var_m = tk.StringVar(value='sharpe')
+        cm = ttk.Combobox(win, textvariable=var_m,
+                          values=['sharpe', 'total_return', 'profit_factor',
+                                  'max_drawdown', 'win_rate'],
+                          state='readonly')
+        cm.pack(fill='x', padx=20)
+
+        ttk.Label(win, text='Шагов сетки:').pack(pady=(10, 2))
+        var_n = tk.IntVar(value=6)
+        cn = ttk.Combobox(win, textvariable=var_n,
+                          values=[4, 5, 6, 8, 10, 12], state='readonly')
+        cn.pack(fill='x', padx=20)
+
+        def run_heatmap():
+            px = var_x.get()
+            py = var_y.get()
+            if px == py:
+                self.app.add_backtest_result("Параметры X и Y должны различаться.")
+                return
+            metric = var_m.get()
+            n_steps = var_n.get()
+            win.destroy()
+            self._do_heatmap(strategy_id, params, px, py, metric, n_steps)
+
+        ttk.Button(win, text='Построить Heatmap', command=run_heatmap).pack(pady=20)
+
+    def _do_heatmap(self, strategy_id, params, param_x, param_y, metric, n_steps):
+        from optimization.sensitivity import plot_heatmap_grid
+        try:
+            fig = plot_heatmap_grid(
+                strategy_id, self.state.stock_data, param_x, param_y,
+                base_params=params, n_steps=n_steps, metric=metric)
+            if fig is not None:
+                fig.show()
+            else:
+                self.app.add_backtest_result("Heatmap не построен (недостаточно данных).")
+        except Exception as e:
+            self.app.add_backtest_result(f"Ошибка построения Heatmap: {e}")
 
     def _on_fundamental(self):
         ticker = self.app.get_selected_ticker()

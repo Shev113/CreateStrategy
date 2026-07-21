@@ -41,7 +41,8 @@ class StockAppVisual:
                  get_moex_tickers, on_backtest, on_diary=None,
                  on_show_settings=None, on_save_results=None,
                  on_optimize=None, on_portfolio=None, on_walkforward=None,
-                 on_sensitivity=None, on_fundamental=None,
+                  on_sensitivity=None, on_fundamental=None,
+                  on_heatmap=None,
                  favorites=None, on_toggle_favorite=None,
                  sector_db=None, on_pending=None):
         self.root = parent.winfo_toplevel()
@@ -196,6 +197,11 @@ class StockAppVisual:
             action_frame, text="7. Фундам.", command=lambda: on_fundamental() if on_fundamental else None)
         self.fundamental_button.grid(row=1, column=3, padx=2, pady=1)
         ToolTip(self.fundamental_button, 'Фундаментальный анализ — мультипликаторы, дивиденды, скоринг.\nP/E, P/B, дивидендная доходность, капитализация,\nистория дивидендов и рекомендация ПОКУПАТЬ/ДЕРЖАТЬ/ИЗБЕГАТЬ.')
+
+        self.heatmap_button = ttk.Button(
+            action_frame, text="8. Heatmap", command=lambda: on_heatmap() if on_heatmap else None)
+        self.heatmap_button.grid(row=1, column=4, padx=2, pady=1)
+        ToolTip(self.heatmap_button, '2D-тепловая карта — как два параметра влияют на метрику.\nПомогает визуально найти оптимальную зону параметров.')
 
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)

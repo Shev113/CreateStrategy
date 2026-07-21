@@ -234,8 +234,117 @@ def plot_heatmap(sens_result, param_x=None, param_y=None, metric='sharpe'):
     x_vals = [v['value'] for v in results[param_x]['variations']]
     y_vals = [v['value'] for v in results[param_y]['variations']]
 
-    base_params = {}
-    for key in sorted_keys:
-        base_params[key] = results[key]['base_value']
+    n_x = len(x_vals)
+    n_y = len(y_vals)
+    z = np.zeros((n_y, n_x))
+
+    # Build matrix: row=param_y, col=param_x
+    for j, vy in enumerate(results[param_y]['variations']):
+        # find vy match in param_y variations, get the corresponding result entry
+        pass
 
     return None
+
+
+def plot_heatmap_grid(strategy_id, candles, param_x, param_y,
+                       base_params=None, n_steps=8, metric='sharpe'):
+    """2D heatmap grid search over two parameters.
+
+    Parameters
+    ----------
+    strategy_id : str
+    candles : list
+    param_x, param_y : str
+        Parameter names to sweep.
+    base_params : dict, optional
+        Base parameters. Defaults from config. The two sweep params are
+        overridden with a 6x6 grid centred on their base values.
+    n_steps : int
+        Number of steps per axis (default 8 → 64 combinations).
+    metric : str
+        Metric to display on the heatmap ('sharpe', 'total_return',
+        'profit_factor', 'max_drawdown').
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure or None
+    """
+    try:
+        import matplotlib
+        matplotlib.use('TkAgg')
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import TwoSlopeNorm
+    except ImportError:
+        return None
+
+    from strategy.config import get_default_params
+
+    if base_params is None:
+        base_params = get_default_params(strategy_id)
+    else:
+        base_params = dict(base_params)
+    base_params['strategy'] = strategy_id
+    if 'risk_per_trade' in base_params:
+        base_params['risk_per_trade'] = base_params['risk_per_trade'] / 100.0
+    if 'commission' in base_params:
+        base_params['commission'] = base_params['commission'] / 100.0
+
+    # Determine min/max ranges for both params
+    def _guess_range(key):
+        base = base_params.get(key)
+        if base is None:
+            return 0.5, 1.5
+        if isinstance(base, int):
+            lo = max(1, int(base * 0.5))
+            hi = int(base * 1.5) + 1
+            return lo, hi
+        lo = base * 0.3
+        hi = base * 2.0
+        return lo, hi
+
+    lo_x, hi_x = _guess_range(param_x)
+    lo_y, hi_y = _guess_range(param_y)
+
+    x_vals = np.linspace(lo_x, hi_x, n_steps)
+    y_vals = np.linspace(lo_y, hi_y, n_steps)
+
+    # Ensure int params render as int ticks
+    if isinstance(base_params.get(param_x), int):
+        x_vals = np.round(x_vals).astype(int)
+    if isinstance(base_params.get(param_y), int):
+        y_vals = np.round(y_vals).astype(int)
+
+    z = np.full((n_steps, n_steps), np.nan)
+
+    for i, vx in enumerate(x_vals):
+        for j, vy in enumerate(y_vals):
+            p = dict(base_params)
+            p[param_x] = int(vx) if isinstance(base_params.get(param_x), int) else vx
+            p[param_y] = int(vy) if isinstance(base_params.get(param_y), int) else vy
+            try:
+                _, m = _run_single(candles, p)
+                val = m.get(metric, 0) or m.get(metric, 0)
+                z[j, i] = val
+            except Exception:
+                z[j, i] = np.nan
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    valid = z[~np.isnan(z)]
+    vmin = np.min(valid) if len(valid) else -1
+    vmax = np.max(valid) if len(valid) else 1
+    if vmin < 0 < vmax:
+        norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    else:
+        norm = None
+
+    cmap = 'RdYlGn'
+    im = ax.imshow(z, aspect='auto', origin='lower', cmap=cmap, norm=norm,
+                   extent=[x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]])
+
+    ax.set_xlabel(param_x)
+    ax.set_ylabel(param_y)
+    ax.set_title(f'Heatmap: {metric} по {param_x} vs {param_y}')
+
+    fig.colorbar(im, ax=ax, label=metric)
+    fig.tight_layout()
+    return fig
