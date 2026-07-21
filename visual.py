@@ -273,6 +273,17 @@ class StockAppVisual:
         self.sector_exposure_entry.grid(row=0, column=7, padx=2)
         ToolTip(self.sector_exposure_entry, 'Макс. доля капитала в одном секторе (%).\n30 = не более 30% капитала в одном секторе.\n0 = без лимита. Требуется загрузка секторов.')
 
+        ttk.Label(risk_frame, text='Взвешивание').grid(row=0, column=8, padx=(10, 2), sticky='e')
+        self.weighting_var = tk.StringVar(value='equal')
+        self.weighting_combo = ttk.Combobox(risk_frame, textvariable=self.weighting_var,
+                                            values=['equal', 'risk_parity', 'min_variance'],
+                                            state='readonly', width=12)
+        self.weighting_combo.grid(row=0, column=9, padx=2)
+        ToolTip(self.weighting_combo, 'Способ распределения капитала между тикерами.\n'
+                'equal: равномерное (1/N).\n'
+                'risk_parity: обратно пропорц. волатильности.\n'
+                'min_variance: минимум портфельной дисперсии.')
+
         parent.grid_rowconfigure(10, weight=1)
 
         self.top_signals_frame = ttk.LabelFrame(parent, text='Последние сигналы')
@@ -770,6 +781,7 @@ class StockAppVisual:
                 'max_drawdown_pct': max_dd,
                 'cooldown_bars': cooldown,
                 'max_sector_exposure': sector_pct / 100.0,
+                'weighting': self.weighting_var.get(),
             }
         except (ValueError, TypeError):
             return None

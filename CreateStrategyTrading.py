@@ -1567,7 +1567,9 @@ class CreateStrategyApp:
                 )
 
                 result = run_portfolio(portfolio_data, capital=params.get('capital', 1_000_000),
-                                       risk_manager=risk_manager, **params)
+                                       risk_manager=risk_manager,
+                                       weighting=risk_params.get('weighting', 'equal'),
+                                       **params)
 
                 self.root.after(0, lambda: self._on_portfolio_complete(result, strategy_id, errors))
             except Exception as e:
@@ -1601,6 +1603,29 @@ class CreateStrategyApp:
             f"Max Drawdown:       -{pm['max_drawdown']:.2f} %",
             f"Sharpe Ratio:       {pm['sharpe']}",
         ]
+
+        weights = result.get('weights')
+        if weights and len(set(weights.values())) > 1:
+            lines.append("")
+            lines.append("── Веса тикеров ──")
+            for t, w in sorted(weights.items(), key=lambda x: -x[1]):
+                if w > 0:
+                    lines.append(f"  {t}: {w*100:.1f}%")
+                else:
+                    lines.append(f"  {t}: 0% (недостаточно сделок)")
+
+        corr = result.get('correlation_matrix')
+        if corr:
+            lines.append("")
+            lines.append("── Корреляционная матрица ──")
+            tickers_sorted = sorted(corr.keys())
+            header = " " * 10 + "".join(f"{t:>8}" for t in tickers_sorted)
+            lines.append(header)
+            for t1 in tickers_sorted:
+                row = f"{t1:<10}"
+                for t2 in tickers_sorted:
+                    row += f"{corr[t1][t2]:>8.2f}"
+                lines.append(row)
 
         risk_stats = result.get('risk_stats')
         if risk_stats:
