@@ -64,7 +64,50 @@ def _entry_from_dict(d):
     return DiaryEntry(**kwargs)
 
 
-def check_candle_hit(entry_price, sl_price, tp_price, side, candles):
+def check_candle_hit(entry_price, sl_price, tp_price, side, candles, h1_candles=None):
+    """Check if SL or TP was hit in given candles.
+
+    For the entry day, if h1_candles are provided, only candles AFTER
+    the first H1 candle that reached entry_price are considered for SL.
+    This prevents SL from triggering before the position was actually opened.
+    """
+    if h1_candles and len(h1_candles) >= 2:
+        # Find the first H1 candle where price reached entry_price
+        entry_h1_idx = None
+        for i, c in enumerate(h1_candles):
+            if c is None or len(c) < 4:
+                continue
+            _, _, h, l = float(c[0]), float(c[1]), float(c[2]), float(c[3])
+            if side == 'LONG':
+                if h >= entry_price:
+                    entry_h1_idx = i
+                    break
+            else:
+                if l <= entry_price:
+                    entry_h1_idx = i
+                    break
+
+        if entry_h1_idx is not None:
+            # Check SL/TP only on H1 candles AFTER entry
+            for c in h1_candles[entry_h1_idx + 1:]:
+                if c is None or len(c) < 4:
+                    continue
+                _, _, h, l = float(c[0]), float(c[1]), float(c[2]), float(c[3])
+                if side == 'LONG':
+                    if l <= sl_price:
+                        return 'SL', sl_price
+                    if h >= tp_price:
+                        return 'TP', tp_price
+                else:
+                    if h >= sl_price:
+                        return 'SL', sl_price
+                    if l <= tp_price:
+                        return 'TP', tp_price
+            # Price never hit SL/TP after entry day on H1 — continue to daily check
+            # for subsequent days
+            pass
+
+    # Fallback: daily candle check (original logic with entry price guard)
     if side == 'LONG':
         for c in candles:
             if c is None or len(c) < 4:
@@ -121,7 +164,7 @@ class DiaryStorage:
     def get_open_entries(self):
         return [e for e in self.load() if e.is_open]
 
-    def check_positions(self, fetch_fn):
+    def check_positions(self, fetch_fn, fetch_h1_fn=None):
         entries = self.load()
         now_str = datetime.now().strftime('%Y-%m-%d')
         updated = 0
@@ -167,8 +210,16 @@ class DiaryStorage:
                 if len(relevant) < 2:
                     continue
 
+                # Get H1 candles for entry day (for accurate intraday SL/TP check)
+                h1_candles = None
+                if fetch_h1_fn is not None:
+                    try:
+                        h1_candles = fetch_h1_fn(e.ticker, date_only)
+                    except Exception:
+                        pass
+
                 reason, exit_price_hit = check_candle_hit(
-                    e.entry_price, e.sl_price, e.tp_price, e.side, relevant)
+                    e.entry_price, e.sl_price, e.tp_price, e.side, relevant, h1_candles)
 
                 if not reason and len(relevant) > e.max_hold:
                     timeout_idx = e.max_hold

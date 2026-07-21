@@ -209,6 +209,49 @@ class CreateStrategyApp:
             save_session(symbol, 24, result, start_date=start_date)
         return result
 
+    def get_h1_stock_data(self, symbol: str, date_str: str) -> list | str:
+        """Получение часовых свечей по акции за одну дату."""
+        try:
+            url = f"https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/{symbol}/candles.json"
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            params = {
+                "start": 0,
+                "from": date_str,
+                "till": date_str,
+                "interval": 60
+            }
+            response = _MOEX_SESSION.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+        except Exception:
+            return None
+
+        if 'candles' not in data:
+            return None
+        columns = [c['name'] for c in data['candles']['columns']]
+        rows = data['candles']['data']
+        if not rows:
+            return None
+
+        open_idx = columns.index('open')
+        close_idx = columns.index('close')
+        high_idx = columns.index('high')
+        low_idx = columns.index('low')
+        volume_idx = columns.index('volume')
+        value_idx = columns.index('value')
+        begin_idx = columns.index('begin')
+        end_idx = columns.index('end')
+
+        candles = []
+        for row in rows:
+            candles.append([
+                float(row[open_idx]), float(row[close_idx]),
+                float(row[high_idx]), float(row[low_idx]),
+                float(row[volume_idx]), float(row[value_idx]),
+                row[begin_idx], row[end_idx]
+            ])
+        return candles
+
     def _fetch_stock_data_raw(self, symbol: str, start_date: str, end_date: str) -> list | str:
         """Получение исторических данных по акции (сырой HTTP-запрос)"""
         try:
@@ -2272,7 +2315,7 @@ class CreateStrategyApp:
 
         def task():
             try:
-                updated = self.diary_storage.check_positions(self.get_stock_data)
+                updated = self.diary_storage.check_positions(self.get_stock_data, self.get_h1_stock_data)
                 self.root.after(0, lambda: self._on_check_positions_done(updated))
             except Exception as e:
                 self.root.after(0, lambda: self.diary_ui.refresh())
@@ -2289,7 +2332,7 @@ class CreateStrategyApp:
 
         def task():
             try:
-                updated = self.diary_storage.check_positions(self.get_stock_data)
+                updated = self.diary_storage.check_positions(self.get_stock_data, self.get_h1_stock_data)
                 if updated:
                     self.root.after(0, lambda: self.diary_ui.refresh())
                     self.root.after(0, lambda: mb.showinfo(
