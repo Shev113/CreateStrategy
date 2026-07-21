@@ -57,6 +57,8 @@ class IntradayEngine:
         self.exit_assumption = int(exit_assumption)
         self.slippage_bps = max(int(slippage_bps), 0)
         self.max_position_pct = max(float(max_position_pct), 0)
+        self.bankrupted = self.capital <= 0
+        self.bankruptcy_date = None
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self.last_levels = []
@@ -248,6 +250,9 @@ class IntradayEngine:
                     position['exit_idx'] = i
                     position['exit_date'] = df.index[i]
                     self.capital += net_pnl
+                    if self.capital <= 0:
+                        self.bankrupted = True
+                        self.bankruptcy_date = df.index[i]
                     trades.append(dict(position))
                     position = None
 
@@ -258,4 +263,7 @@ class IntradayEngine:
 
         metrics = calc_h1_metrics(
             trades, self.initial_capital, self.capital, candles_df=df)
+        if self.bankrupted:
+            metrics['bankrupted'] = True
+            metrics['bankruptcy_date'] = str(self.bankruptcy_date) if self.bankruptcy_date else ''
         return trades, metrics

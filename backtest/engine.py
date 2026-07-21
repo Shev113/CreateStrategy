@@ -80,6 +80,8 @@ class BacktestEngine:
         self.exit_assumption = int(exit_assumption)
         self.slippage_bps = max(int(slippage_bps), 0)
         self.max_position_pct = max(float(max_position_pct), 0)
+        self.bankrupted = self.capital <= 0
+        self.bankruptcy_date = None
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
@@ -87,6 +89,8 @@ class BacktestEngine:
         self.signal_recorder = None  # callable(ticker, side, price, sl, tp, entered, date=None)
 
     def _calc_position_size(self, capital, entry_price, sl_price, atr):
+        if self.bankrupted:
+            return 0
         if self.position_sizing == 3:
             risk_amount = capital * self.risk_per_trade
             sl_dist = abs(entry_price - sl_price)
@@ -165,6 +169,18 @@ class BacktestEngine:
         sell_exit  = 1 - base  # SELL exit: slippage makes you buy back higher
         return buy_entry, sell_entry, buy_exit, sell_exit
 
+    def _bankrupt_metrics(self):
+        return {
+            'total_return': round((self.capital / max(self.initial_capital, 1) - 1) * 100, 2),
+            'win_rate': 0, 'profit_factor': 0, 'max_drawdown': 0, 'sharpe': 0,
+            'total_trades': 0, 'avg_win': 0, 'avg_loss': 0,
+            'initial_capital': self.initial_capital,
+            'final_capital': round(self.capital, 2),
+            'net_profit': round(self.capital - self.initial_capital, 2),
+            'bankrupted': True,
+            'bankruptcy_date': str(self.bankruptcy_date) if self.bankruptcy_date else '',
+        }
+
     def _mtf_allows(self, df, idx, side):
         """Check if higher timeframe trend agrees with signal side."""
         if not self.use_mtf_filter:
@@ -201,6 +217,9 @@ class BacktestEngine:
         return self._signal_func(candles, idx, levels, atr, **extra_kwargs)
 
     def run(self, candles_list):
+        if self.capital <= 0:
+            self.bankrupted = True
+            return [], self._bankrupt_metrics()
         df = candles_to_df(candles_list)
         if df is None or len(df) < self.atr_period + 5:
             return [], calc_metrics(
@@ -402,6 +421,9 @@ class BacktestEngine:
                                 comm = ep * close_qty * self.commission + exit_tp1 * close_qty * self.commission
                                 pnl -= comm
                                 self.capital += pnl
+                                if self.capital <= 0:
+                                    self.bankrupted = True
+                                    self.bankruptcy_date = df.index[i]
                                 pnl_pct = (exit_tp1 / ep - 1) * 100 if position['side'] == 'BUY' else (1 - exit_tp1 / ep) * 100
                                 trades.append({
                                     'side': position['side'],
@@ -507,6 +529,9 @@ class BacktestEngine:
                     pnl -= comm
 
                     self.capital += pnl
+                    if self.capital <= 0:
+                        self.bankrupted = True
+                        self.bankruptcy_date = df.index[i]
 
                     exit_tag = 'TRAILING_SL' if exit_reason == 'SL' and self.trailing_sl and current_sl != position['sl'] else exit_reason
 
@@ -553,6 +578,9 @@ class BacktestEngine:
                 pnl_pct = (1 - cl / ep) * 100
 
             self.capital += pnl
+            if self.capital <= 0:
+                self.bankrupted = True
+                self.bankruptcy_date = df.index[-1]
 
             trades.append({
                 'side': position['side'],
@@ -581,6 +609,9 @@ class BacktestEngine:
         metrics = calc_metrics(
             trades, self.initial_capital, self.capital,
             candles_df=df, include_advanced=True)
+        if self.bankrupted:
+            metrics['bankrupted'] = True
+            metrics['bankruptcy_date'] = str(self.bankruptcy_date) if self.bankruptcy_date else ''
         return trades, metrics
 
     @property

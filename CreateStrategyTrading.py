@@ -1053,6 +1053,12 @@ class CreateStrategyApp:
                               selected_stock, signal=None, params=None, engine=None):
         self.app.backtest_button.config(state='normal', text='2. Backtest')
         self.app.display_backtest_results(metrics, params)
+        if metrics and metrics.get('bankrupted', False):
+            bdate = metrics.get('bankruptcy_date', '')
+            txt = self.app.backtest_text
+            txt.insert(tk.END, f"\n{'='*50}\n")
+            txt.insert(tk.END, f"⚠ КАПИТАЛ ПОТЕРЯН {bdate} — ТОРГОВЛЯ ОСТАНОВЛЕНА\n")
+            txt.insert(tk.END, f"{'='*50}\n")
         self.app.enable_save_results_button()
         self._last_trades = trades
         if params and 'capital' in params:
