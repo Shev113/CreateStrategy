@@ -41,11 +41,14 @@ class BacktestEngine:
                  trailing_offset=0.5, trailing_ma_period=20,
                  partial_tp=0, partial_tp_ratio1=1.5,
                  partial_tp_ratio2=3.0, partial_tp_size1=0.5,
-                 use_pivot_levels=0, pivot_lookback=5,
+                 level_proximity=0.5, use_pivot_levels=0,
+                 pivot_max_bars=200, pivot_strength=3,
+                 pivot_lookback=2,
                  use_mtf_filter=0, mtf_ma_period=20,
                  position_sizing=0, kelly_fraction=0.25, atr_sizing_mult=2.0,
                  exit_assumption=0,
                  slippage_bps=5,
+                 max_position_pct=5.0,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -76,6 +79,7 @@ class BacktestEngine:
         self.atr_sizing_mult = max(atr_sizing_mult, 0.5)
         self.exit_assumption = int(exit_assumption)
         self.slippage_bps = max(int(slippage_bps), 0)
+        self.max_position_pct = max(float(max_position_pct), 0)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self._final_levels = []
@@ -83,10 +87,18 @@ class BacktestEngine:
         self.signal_recorder = None  # callable(ticker, side, price, sl, tp, entered, date=None)
 
     def _calc_position_size(self, capital, entry_price, sl_price, atr):
+        if self.position_sizing == 3:
+            risk_amount = capital * self.risk_per_trade
+            sl_dist = abs(entry_price - sl_price)
+            if sl_dist <= 0:
+                return 0
+            qty = risk_amount / sl_dist
+            return self._cap_by_liquidity(qty, entry_price)
+
         if self.position_sizing == 2:
             risk_amount = capital * self.risk_per_trade
             qty = risk_amount / (self.atr_sizing_mult * atr)
-            return max(qty, 0)
+            return self._cap_by_liquidity(qty, entry_price)
 
         if self.position_sizing == 1:
             # Kelly Criterion — risk-based sizing.
@@ -103,22 +115,31 @@ class BacktestEngine:
                 f_kelly = (win_rate * b - (1 - win_rate)) / b
                 f_kelly = max(min(f_kelly, 0.5), 0.01)
             else:
-                # Недостаточно статистики — консервативная оценка
-                # оптимальной доли Kelly (без срезающего коэффициента).
                 f_kelly = 0.25
             risk_per_share = abs(entry_price - sl_price)
             if risk_per_share <= 0:
                 return 0
             risk_amount = capital * f_kelly * self.kelly_fraction
             qty = risk_amount / risk_per_share
-            return max(qty, 0)
+            return self._cap_by_liquidity(qty, entry_price)
 
         # Default: fixed risk
         sl_dist = abs(entry_price - sl_price) / entry_price if entry_price != 0 else 0.01
         if sl_dist <= 0:
             return 0
         risk_amount = capital * self.risk_per_trade
-        return risk_amount / (sl_dist * entry_price)
+        qty = risk_amount / (sl_dist * entry_price)
+        return self._cap_by_liquidity(qty, entry_price)
+
+    def _cap_by_liquidity(self, qty, entry_price):
+        """Cap qty by max_position_pct of estimated daily volume (last candle volume * price)."""
+        if self.max_position_pct <= 0 or not hasattr(self, '_last_candle_value'):
+            return max(qty, 0)
+        daily_value = self._last_candle_value or 1
+        max_qty = (daily_value * self.max_position_pct / 100.0) / entry_price if entry_price > 0 else float('inf')
+        if max_qty > 0 and qty > max_qty:
+            return max(max_qty, 0)
+        return max(qty, 0)
 
     def _slippage_factor(self, df, idx):
         """Calculate slippage multiplier for entry/exit: 0 = none, higher = more slippage.
@@ -209,6 +230,7 @@ class BacktestEngine:
                 price_counter[round_to_tolerance(float(candle[3]), tolerance)] += 1
 
             current_candle = candles_list[i]
+            self._last_candle_value = float(current_candle[4]) * float(current_candle[2])
 
             atr = atr_series.iloc[i]
             has_atr = not pd.isna(atr)

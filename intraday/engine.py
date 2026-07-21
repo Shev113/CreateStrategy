@@ -42,6 +42,7 @@ class IntradayEngine:
                  max_hold=20, commission=0.0005, strategy='nr4',
                  entry_type=0, exit_assumption=0,
                  slippage_bps=5,
+                 max_position_pct=5.0,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -55,6 +56,7 @@ class IntradayEngine:
         self.entry_type = entry_type
         self.exit_assumption = int(exit_assumption)
         self.slippage_bps = max(int(slippage_bps), 0)
+        self.max_position_pct = max(float(max_position_pct), 0)
         self.strategy_kwargs = strategy_kwargs
         self._signal_func = None
         self.last_levels = []
@@ -163,6 +165,12 @@ class IntradayEngine:
                     tp_price = pending_signal['tp_price']
                     risk_dist = max(abs(entry_price - sl_price), entry_price * 0.001)
                     qty = max(1, int(self.capital * self.risk_per_trade / risk_dist))
+                    # Cap by liquidity
+                    if self.max_position_pct > 0:
+                        daily_value = float(current_candle[4]) * float(current_candle[2])
+                        max_qty = int(daily_value * self.max_position_pct / 100.0 / entry_price) if entry_price > 0 else qty
+                        if max_qty > 0 and qty > max_qty:
+                            qty = max(1, max_qty)
                     position = {
                         'side': side,
                         'entry_price': entry_price,

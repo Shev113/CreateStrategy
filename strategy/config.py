@@ -33,11 +33,13 @@ EXIT_STRATEGY_PARAMS = [
 
     # --- Position sizing ---
     {'key': 'position_sizing', 'label': 'Управление размером', 'default': 0, 'type': int,
-     'hint': 'Метод расчёта объёма позиции.\n0 = фиксированный % риска, 1 = Kelly Criterion,\n2 = ATR-зависимый (обратно пропорц. волатильности)'},
+     'hint': 'Метод расчёта объёма позиции.\n0 = фиксированный % риска (риск/дистанция до SL),\n1 = Kelly Criterion,\n2 = ATR-зависимый (обратно пропорц. волатильности),\n3 = risk-based (только риск, без Kelly)'},
     {'key': 'kelly_fraction', 'label': 'Доля Kelly', 'default': 0.25, 'type': float,
      'hint': 'Доля от Kelly Criterion (0.0–1.0).\n0.25 = четверть Kelly (консервативно),\n1.0 = полный Kelly (агрессивно)'},
     {'key': 'atr_sizing_mult', 'label': 'ATR-множитель', 'default': 2.0, 'type': float,
      'hint': 'Множитель ATR для волатильного позиционирования.\nВыше ATR = меньше позиция, ниже ATR = больше'},
+    {'key': 'max_position_pct', 'label': 'Макс. % от объёма', 'default': 5.0, 'type': float,
+     'hint': 'Максимальный размер позиции в % от оценочного дневного объёма бумаги.\nЗащита от перегрузки портфеля низколиквидной бумагой.\n0 = без ограничения'},
     {'key': 'exit_assumption', 'label': 'Предположение SL/TP', 'default': 0, 'type': int,
      'hint': 'Когда SL и TP попадают в диапазон [low, high] одной свечи:\n0 = консервативный (SL срабатывает первым),\n1 = оптимистичный (TP первым),\n2 = случайный (50/50, усреднение)'},
     {'key': 'slippage_bps', 'label': 'Slippage (bps)', 'default': 5, 'type': int,
