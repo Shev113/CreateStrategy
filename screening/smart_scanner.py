@@ -176,7 +176,7 @@ class SmartScanner:
             start = time.monotonic()
             while _progress_step < total_steps:
                 try:
-                    ticker_name = progress_queue.get()
+                    ticker_name = progress_queue.get(timeout=60)
                     _progress_step += 1
                     elapsed = time.monotonic() - start
                     rate = _progress_step / elapsed if elapsed > 0 else 0
@@ -186,6 +186,8 @@ class SmartScanner:
                     else:
                         eta_str = f"~{int(remaining)}с"
                     progress_fn(min(_progress_step, total_steps), total_steps, ticker_name, eta_str)
+                except mp.queues.Empty:
+                    break
                 except Exception:
                     break
 
