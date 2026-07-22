@@ -66,10 +66,19 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
 def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
                             ticker='', progress_queue=None):
     """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
-    df = candles_to_df(stock_data)
+    logger = logging.getLogger(__name__)
+    try:
+        df = candles_to_df(stock_data)
+    except Exception as e:
+        logger.exception('SmartScanner: %s candles_to_df failed: %s', ticker, e)
+        df = None
     atr_series = None
     if df is not None and len(df) > 0:
-        atr_series = calc_atr(df, base_params.get('atr_period', 14))
+        try:
+            atr_period = base_params.get('atr_period', 14)
+            atr_series = calc_atr(df, atr_period)
+        except Exception as e:
+            logger.exception('SmartScanner: %s calc_atr failed: %s', ticker, e)
 
     results = {}
     for sid in strategy_ids:
@@ -84,11 +93,13 @@ def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
             max_hold=params.get('max_hold', 20),
             commission=params.get('commission', 0.0005),
             entry_type=params.get('entry_type', 0),
+            atr_period=params.get('atr_period', 14),
             _precomputed_atr=atr_series,
         )
         try:
             trades, metrics = engine.run(stock_data)
-        except Exception:
+        except Exception as e:
+            logger.exception('SmartScanner: %s/%s engine.run failed: %s', ticker, sid, e)
             metrics = {}
             trades = []
         score = calc_composite(metrics, min_trades)
@@ -208,7 +219,7 @@ class SmartScanner:
                 try:
                     strategies_result = f.result()
                 except Exception as e:
-                    logging.warning(f'SmartScanner: {t} process worker failed: {e}')
+                    logging.exception(f'SmartScanner: {t} worker failed: {e}')
                     strategies_result = {}
 
                 best_strategy_id = None
