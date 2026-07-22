@@ -1,5 +1,8 @@
 import logging
 import math
+import multiprocessing as mp
+import threading
+import time
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
@@ -60,7 +63,8 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
         return {'action': 'NONE', 'level': None, 'strength': None}
 
 
-def _run_ticker_strategies(stock_data, base_params, min_trades, atr_series, df, strategy_ids):
+def _run_ticker_strategies(stock_data, base_params, min_trades, atr_series, df, strategy_ids,
+                            ticker='', progress_queue=None):
     """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
     results = {}
     for sid in strategy_ids:
@@ -92,6 +96,8 @@ def _run_ticker_strategies(stock_data, base_params, min_trades, atr_series, df, 
             'signal': signal,
             'score': score,
         }
+        if progress_queue is not None:
+            progress_queue.put(ticker)
     return results
 
 
@@ -155,11 +161,39 @@ class SmartScanner:
         total_processed = 0
         skipped_count = total_tickers - len(ticker_prepared)
 
+        # Per-strategy progress via mp.Queue (worker sends ticker per strategy done)
+        progress_queue = mp.Queue() if progress_fn else None
+        _progress_step = 0
+
+        def _drain():
+            nonlocal _progress_step
+            if not progress_fn:
+                return
+            start = time.monotonic()
+            while _progress_step < total_steps:
+                try:
+                    ticker_name = progress_queue.get()
+                    _progress_step += 1
+                    elapsed = time.monotonic() - start
+                    rate = _progress_step / elapsed if elapsed > 0 else 0
+                    remaining = (total_steps - _progress_step) / rate if rate > 0 else 0
+                    if remaining >= 60:
+                        eta_str = f"~{int(remaining // 60)}:{int(remaining % 60):02d}"
+                    else:
+                        eta_str = f"~{int(remaining)}с"
+                    progress_fn(min(_progress_step, total_steps), total_steps, ticker_name, eta_str)
+                except Exception:
+                    break
+
+        if progress_queue is not None:
+            threading.Thread(target=_drain, daemon=True).start()
+
         with ProcessPoolExecutor(max_workers=min(6, len(ticker_prepared) or 1)) as pool:
             fut_map = {}
             for t, sd, atr_series, df in ticker_prepared:
                 fut = pool.submit(_run_ticker_strategies, sd, base_params,
-                                  min_trades, atr_series, df, strategy_ids)
+                                  min_trades, atr_series, df, strategy_ids,
+                                  t, progress_queue)
                 fut_map[fut] = (t, sd, atr_series, df)
 
             for f in as_completed(fut_map):
@@ -195,9 +229,6 @@ class SmartScanner:
 
                 self.results.append(entry)
                 total_processed += 1
-                if progress_fn:
-                    step = total_processed * len(strategy_ids)
-                    progress_fn(step, total_steps, t, '')
 
         logging.info(f'SmartScanner: done. tested={len(self.results)} skipped={skipped_count} of {total_tickers}')
         self.results.sort(key=lambda r: r.get('best_score', -1), reverse=True)

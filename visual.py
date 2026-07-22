@@ -1454,10 +1454,13 @@ class SmartScannerUI:
             self.export_excel_button.config(state='normal')
             self.status_var.set('Завершено')
 
-    def update_progress(self, current, total, ticker, strategy_name):
+    def update_progress(self, current, total, ticker, eta):
         pct = (current / max(total, 1)) * 100
         self.progress_var.set(pct)
-        self.status_var.set(f"{ticker} — тестирование {strategy_name} ({current}/{total})")
+        status = f"{current}/{total} — {ticker}"
+        if eta:
+            status += f" ост. {eta}"
+        self.status_var.set(status)
         self.parent.update_idletasks()
 
     def show_results(self, results):
