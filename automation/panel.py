@@ -17,17 +17,24 @@ class AutomationPanel:
         main = ttk.Frame(parent)
         main.pack(fill='both', expand=1, padx=10, pady=5)
 
-        self._build_auto_scan(main)
-        self._build_monitor(main)
-        self._build_watchlist(main)
-        self._build_controls(main)
-        self._build_status(main)
+        main.grid_rowconfigure(0, weight=1)
+        main.grid_rowconfigure(1, weight=1)
+        main.grid_rowconfigure(2, weight=1)
+        main.grid_rowconfigure(3, weight=0)
+        main.grid_rowconfigure(4, weight=2)
+        main.grid_columnconfigure(0, weight=1)
+
+        self._build_auto_scan(main, 0)
+        self._build_monitor(main, 1)
+        self._build_watchlist(main, 2)
+        self._build_controls(main, 3)
+        self._build_status(main, 4)
 
         self.scheduler.set_status_callback(self._refresh_status)
 
-    def _build_auto_scan(self, parent):
+    def _build_auto_scan(self, parent, grid_row):
         frm = ttk.LabelFrame(parent, text='Автосканер')
-        frm.pack(fill='x', pady=(0, 5))
+        frm.grid(row=grid_row, column=0, sticky='nsew', pady=(0, 5))
 
         row1 = ttk.Frame(frm)
         row1.pack(fill='x', padx=5, pady=2)
@@ -55,9 +62,9 @@ class AutomationPanel:
         self._labels['auto_scan_status'] = ttk.Label(row2, text='—')
         self._labels['auto_scan_status'].pack(side='left')
 
-    def _build_monitor(self, parent):
+    def _build_monitor(self, parent, grid_row):
         frm = ttk.LabelFrame(parent, text='Мониторинг позиций')
-        frm.pack(fill='x', pady=(0, 5))
+        frm.grid(row=grid_row, column=0, sticky='nsew', pady=(0, 5))
 
         row1 = ttk.Frame(frm)
         row1.pack(fill='x', padx=5, pady=2)
@@ -92,9 +99,9 @@ class AutomationPanel:
         self._labels['monitor_status'] = ttk.Label(row2, text='—')
         self._labels['monitor_status'].pack(side='right')
 
-    def _build_watchlist(self, parent):
+    def _build_watchlist(self, parent, grid_row):
         frm = ttk.LabelFrame(parent, text='Обновление вочлиста')
-        frm.pack(fill='x', pady=(0, 5))
+        frm.grid(row=grid_row, column=0, sticky='nsew', pady=(0, 5))
 
         row1 = ttk.Frame(frm)
         row1.pack(fill='x', padx=5, pady=2)
@@ -122,16 +129,16 @@ class AutomationPanel:
         self._labels['watchlist_status'] = ttk.Label(row2, text='—')
         self._labels['watchlist_status'].pack(side='left')
 
-    def _build_controls(self, parent):
+    def _build_controls(self, parent, grid_row):
         frm = ttk.Frame(parent)
-        frm.pack(fill='x', pady=5)
+        frm.grid(row=grid_row, column=0, sticky='ew', pady=5)
 
         ttk.Button(frm, text='Запустить всё', command=self._on_start_all).pack(side='left', padx=5)
         ttk.Button(frm, text='Остановить всё', command=self._on_stop_all).pack(side='left', padx=5)
 
-    def _build_status(self, parent):
+    def _build_status(self, parent, grid_row):
         frm = ttk.LabelFrame(parent, text='Статус')
-        frm.pack(fill='both', expand=1, pady=5)
+        frm.grid(row=grid_row, column=0, sticky='nsew', pady=5)
 
         text_frame = ttk.Frame(frm)
         text_frame.pack(fill='both', expand=1, padx=5, pady=5)
