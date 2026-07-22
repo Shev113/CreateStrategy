@@ -1283,7 +1283,7 @@ class SmartScannerUI:
             var = tk.BooleanVar(value=True)
             self.sector_vars[sector] = var
             cb = ttk.Checkbutton(sector_frame, text=sector, variable=var)
-            cb.grid(row=i // 2, column=i % 2, sticky='w', padx=5, pady=1)
+            cb.grid(row=i // 5, column=i % 5, sticky='w', padx=5, pady=1)
 
         self._total_count_label = ttk.Label(
             parent, text=f"Всего эмитентов: {total_tickers}",
@@ -1343,7 +1343,7 @@ class SmartScannerUI:
         strat_frame.grid(row=row, column=0, columnspan=2, sticky='ew', padx=5)
         row += 1
 
-        cols = 3
+        cols = 6
         for idx, (sid, name) in enumerate(self._strategy_names):
             var = tk.BooleanVar(value=True)
             self.strategy_vars[sid] = var
