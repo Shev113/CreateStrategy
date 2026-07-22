@@ -133,8 +133,16 @@ class AutomationPanel:
         frm = ttk.LabelFrame(parent, text='Статус')
         frm.pack(fill='both', expand=1, pady=5)
 
-        self._status_text = tk.Text(frm, height=6, font=('Consolas', 9), state='disabled', wrap='word')
-        self._status_text.pack(fill='both', expand=1, padx=5, pady=5)
+        text_frame = ttk.Frame(frm)
+        text_frame.pack(fill='both', expand=1, padx=5, pady=5)
+
+        self._status_text = tk.Text(text_frame, height=8, font=('Consolas', 9),
+                                    state='disabled', wrap='word')
+        status_scroll = ttk.Scrollbar(text_frame, orient='vertical',
+                                       command=self._status_text.yview)
+        self._status_text.configure(yscrollcommand=status_scroll.set)
+        self._status_text.pack(side='left', fill='both', expand=1)
+        status_scroll.pack(side='right', fill='y')
 
     def _on_toggle(self, name):
         enabled = self._vars.get(f'{name}_enabled')

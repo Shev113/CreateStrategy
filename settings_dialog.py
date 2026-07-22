@@ -72,11 +72,6 @@ class SettingsDialog:
         ttk.Button(btn_frame, text='Закрыть', command=self._on_close).pack(side='right')
 
     def _on_close(self):
-        for canvas in getattr(self, '_scrollable_tabs', []):
-            try:
-                canvas.unbind_all('<MouseWheel>')
-            except Exception:
-                pass
         if self.main_app is not None:
             self.main_app.watchlist_ui = None
         if self._dialog and self._dialog.winfo_exists():
@@ -94,16 +89,29 @@ class SettingsDialog:
         canvas.create_window((0, 0), window=inner, anchor='nw', tags='inner')
         canvas.configure(yscrollcommand=vsb.set)
 
-        # Inner frame expands to canvas width so widgets span full width
         def _on_canvas_resize(event):
             canvas.itemconfigure('inner', width=event.width)
         canvas.bind('<Configure>', _on_canvas_resize)
 
-        # Mousewheel scroll only when pointer is over this canvas
         def _on_wheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
-        canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _on_wheel))
-        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+
+        def _bind_wheel_recursive(widget):
+            try:
+                widget.bind('<MouseWheel>', _on_wheel)
+            except Exception:
+                pass
+            for child in widget.winfo_children():
+                _bind_wheel_recursive(child)
+
+        def _do_bind():
+            _bind_wheel_recursive(canvas)
+            _bind_wheel_recursive(inner)
+            for canvas_child in canvas.find_all():
+                pass
+
+        canvas.after(300, _do_bind)
+        canvas.after(1000, _do_bind)
 
         canvas.pack(side='left', fill='both', expand=True)
         vsb.pack(side='right', fill='y')
