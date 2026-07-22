@@ -1,7 +1,5 @@
 import logging
 import math
-import multiprocessing as mp
-import threading
 import time
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -64,22 +62,9 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
 
 
 def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
-                            ticker='', progress_queue=None):
+                            ticker='', _precomputed_df=None, _precomputed_atr=None):
     """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
     logger = logging.getLogger(__name__)
-    try:
-        df = candles_to_df(stock_data)
-    except Exception as e:
-        logger.exception('SmartScanner: %s candles_to_df failed: %s', ticker, e)
-        df = None
-    atr_series = None
-    if df is not None and len(df) > 0:
-        try:
-            atr_period = base_params.get('atr_period', 14)
-            atr_series = calc_atr(df, atr_period)
-        except Exception as e:
-            logger.exception('SmartScanner: %s calc_atr failed: %s', ticker, e)
-
     results = {}
     for sid in strategy_ids:
         params = deepcopy(base_params)
@@ -94,7 +79,7 @@ def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
             commission=params.get('commission', 0.0005),
             entry_type=params.get('entry_type', 0),
             atr_period=params.get('atr_period', 14),
-            _precomputed_atr=atr_series,
+            _precomputed_atr=_precomputed_atr,
         )
         try:
             trades, metrics = engine.run(stock_data)
@@ -104,16 +89,14 @@ def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
             trades = []
         score = calc_composite(metrics, min_trades)
         signal = _calc_signal(trades, stock_data, params,
-                              _precomputed_atr_series=atr_series,
-                              _precomputed_df=df)
+                              _precomputed_atr_series=_precomputed_atr,
+                              _precomputed_df=_precomputed_df)
         results[sid] = {
             'metrics': metrics,
             'trades': trades,
             'signal': signal,
             'score': score,
         }
-        if progress_queue is not None:
-            progress_queue.put(ticker)
     return results
 
 
@@ -165,62 +148,61 @@ class SmartScanner:
                 if d is not None:
                     data_map[t] = d
 
-        # Phase 2: collect tickers with data (df/atr computed inside worker to avoid pickle overhead)
+        # Phase 2: precompute df/atr in main process (errors visible in log)
         ticker_prepared = []
         for t in tickers:
             sd = data_map.get(t)
             if sd is None:
                 continue
-            ticker_prepared.append((t, sd))
+            try:
+                df = candles_to_df(sd)
+            except Exception as e:
+                logging.exception('SmartScanner: %s candles_to_df failed: %s', t, e)
+                continue
+            if df is None or len(df) == 0:
+                continue
+            try:
+                atr_period = base_params.get('atr_period', 14)
+                atr_series = calc_atr(df, atr_period)
+            except Exception as e:
+                logging.exception('SmartScanner: %s calc_atr failed: %s', t, e)
+                continue
+            ticker_prepared.append((t, sd, df, atr_series))
 
         # Phase 3: run strategies for all tickers in parallel (CPU bound)
         total_processed = 0
         skipped_count = total_tickers - len(ticker_prepared)
 
-        # Per-strategy progress via mp.Queue (worker sends ticker per strategy done)
-        progress_queue = mp.Queue() if progress_fn else None
-        _progress_step = 0
-
-        def _drain():
-            nonlocal _progress_step
-            if not progress_fn:
-                return
-            start = time.monotonic()
-            while _progress_step < total_steps:
-                try:
-                    ticker_name = progress_queue.get(timeout=60)
-                    _progress_step += 1
-                    elapsed = time.monotonic() - start
-                    rate = _progress_step / elapsed if elapsed > 0 else 0
-                    remaining = (total_steps - _progress_step) / rate if rate > 0 else 0
-                    if remaining >= 60:
-                        eta_str = f"~{int(remaining // 60)}:{int(remaining % 60):02d}"
-                    else:
-                        eta_str = f"~{int(remaining)}с"
-                    progress_fn(min(_progress_step, total_steps), total_steps, ticker_name, eta_str)
-                except mp.queues.Empty:
-                    break
-                except Exception:
-                    break
-
-        if progress_queue is not None:
-            threading.Thread(target=_drain, daemon=True).start()
-
         with ProcessPoolExecutor(max_workers=min(6, len(ticker_prepared) or 1)) as pool:
             fut_map = {}
-            for t, sd in ticker_prepared:
+            for t, sd, df, atr in ticker_prepared:
                 fut = pool.submit(_run_ticker_strategies, sd, base_params,
                                   min_trades, strategy_ids,
-                                  t, progress_queue)
-                fut_map[fut] = (t, sd)
+                                  t, df, atr)
+                fut_map[fut] = t
+
+            progress_start = time.monotonic()
+            total_processed_tickers = 0
 
             for f in as_completed(fut_map):
-                t, sd = fut_map[f]
+                t = fut_map[f]
                 try:
                     strategies_result = f.result()
                 except Exception as e:
                     logging.exception(f'SmartScanner: {t} worker failed: {e}')
                     strategies_result = {}
+
+                total_processed_tickers += 1
+                if progress_fn:
+                    elapsed = time.monotonic() - progress_start
+                    rate = total_processed_tickers / elapsed if elapsed > 0 else 0
+                    remaining = (total_tickers - total_processed_tickers) / rate if rate > 0 else 0
+                    if remaining >= 60:
+                        eta_str = f"~{int(remaining // 60)}:{int(remaining % 60):02d}"
+                    else:
+                        eta_str = f"~{int(remaining)}с"
+                    step = total_processed_tickers * len(strategy_ids)
+                    progress_fn(min(step, total_steps), total_steps, t, eta_str)
 
                 best_strategy_id = None
                 best_score = -1.0
