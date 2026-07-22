@@ -1167,15 +1167,16 @@ def get_strategy_func(strategy_id):
     import logging
     import sys
 
-    cached = _STRATEGY_FUNC_CACHE.get(strategy_id)
-    if cached is not None:
-        return cached
+    if strategy_id in _STRATEGY_FUNC_CACHE:
+        return _STRATEGY_FUNC_CACHE[strategy_id]
 
     registry = STRATEGY_REGISTRY.get(strategy_id)
     if not registry:
+        _STRATEGY_FUNC_CACHE[strategy_id] = None
         return None
     path = registry.get('func', '')
     if ':' not in path:
+        _STRATEGY_FUNC_CACHE[strategy_id] = None
         return None
     module_path, func_name = path.split(':')
     try:
