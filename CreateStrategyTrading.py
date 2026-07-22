@@ -7,7 +7,10 @@ import sys
 import threading
 import traceback
 import tempfile
+import multiprocessing
 from datetime import datetime, timedelta
+
+multiprocessing.freeze_support()
 
 import pandas as pd
 import requests
@@ -3471,4 +3474,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

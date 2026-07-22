@@ -1,7 +1,7 @@
-# smart_scanner.py
 import logging
 import math
 from copy import deepcopy
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 from .sectors import SectorDB
 from .levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal
@@ -60,6 +60,41 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
         return {'action': 'NONE', 'level': None, 'strength': None}
 
 
+def _run_ticker_strategies(stock_data, base_params, min_trades, atr_series, df, strategy_ids):
+    """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
+    results = {}
+    for sid in strategy_ids:
+        params = deepcopy(base_params)
+        engine = BacktestEngine(
+            strategy=sid,
+            capital=params.get('capital', 1_000_000),
+            risk_per_trade=params.get('risk_per_trade', 0.02),
+            atr_sl=params.get('atr_sl', 1.0),
+            atr_tp=params.get('atr_tp', 2.0),
+            min_hits=params.get('min_hits', 5),
+            max_hold=params.get('max_hold', 20),
+            commission=params.get('commission', 0.0005),
+            entry_type=params.get('entry_type', 0),
+            _precomputed_atr=atr_series,
+        )
+        try:
+            trades, metrics = engine.run(stock_data)
+        except Exception:
+            metrics = {}
+            trades = []
+        score = calc_composite(metrics, min_trades)
+        signal = _calc_signal(trades, stock_data, params,
+                              _precomputed_atr_series=atr_series,
+                              _precomputed_df=df)
+        results[sid] = {
+            'metrics': metrics,
+            'trades': trades,
+            'signal': signal,
+            'score': score,
+        }
+    return results
+
+
 class SmartScanner:
     def __init__(self, sector_db=None, fetch_fn=None):
         self.sector_db = sector_db or SectorDB()
@@ -77,115 +112,92 @@ class SmartScanner:
         strategy_ids = list(STRATEGY_REGISTRY.keys())
         strategy_names = {k: v['name'] for k, v in STRATEGY_REGISTRY.items()}
 
-        total_processed = 0
-        skipped_count = 0
-        total_tickers = len(all_tickers)
+        ticker_to_sector = {}
+        for sector in sector_list:
+            for t in self.sector_db.get_tickers([sector]):
+                if t not in ticker_to_sector:
+                    ticker_to_sector[t] = sector
+
+        tickers = list(ticker_to_sector.keys())
+        total_tickers = len(tickers)
         total_steps = total_tickers * len(strategy_ids)
 
-        for sector in sector_list:
-            tickers_in_sector = self.sector_db.get_tickers([sector])
-            if not tickers_in_sector:
-                continue
-
-            for ticker in tickers_in_sector:
+        # Phase 1: fetch all data in parallel (I/O bound)
+        data_map = {}
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            def _fetch(t):
                 try:
-                    stock_data = self.fetch_fn(ticker, date_from, date_to)
-                    if isinstance(stock_data, str) or not isinstance(stock_data, list):
-                        logging.warning(f'SmartScanner: skip {ticker} — fetch returned {type(stock_data).__name__}: {stock_data if isinstance(stock_data, str) else "not list"}')
-                        skipped_count += 1
-                        total_processed += 1
-                        if progress_fn:
-                            progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
-                        continue
-                    if len(stock_data) < 30:
-                        logging.warning(f'SmartScanner: skip {ticker} — only {len(stock_data)} candles (< 30)')
-                        skipped_count += 1
-                        total_processed += 1
-                        if progress_fn:
-                            progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
-                        continue
+                    d = self.fetch_fn(t, date_from, date_to)
+                    if isinstance(d, list) and len(d) >= 30:
+                        return t, d
+                except Exception:
+                    pass
+                return t, None
+            fut_map = {pool.submit(_fetch, t): t for t in tickers}
+            for f in as_completed(fut_map):
+                t, d = f.result()
+                if d is not None:
+                    data_map[t] = d
+
+        # Phase 2: build df + atr for each ticker (fast, in main process)
+        ticker_prepared = []
+        for t in tickers:
+            sd = data_map.get(t)
+            if sd is None:
+                continue
+            df = candles_to_df(sd)
+            atr_series = None
+            if df is not None and len(df) > 0:
+                atr_series = calc_atr(df, base_params.get('atr_period', 14))
+            ticker_prepared.append((t, sd, atr_series, df))
+
+        # Phase 3: run strategies for all tickers in parallel (CPU bound)
+        total_processed = 0
+        skipped_count = total_tickers - len(ticker_prepared)
+
+        with ProcessPoolExecutor(max_workers=min(6, len(ticker_prepared) or 1)) as pool:
+            fut_map = {}
+            for t, sd, atr_series, df in ticker_prepared:
+                fut = pool.submit(_run_ticker_strategies, sd, base_params,
+                                  min_trades, atr_series, df, strategy_ids)
+                fut_map[fut] = (t, sd, atr_series, df)
+
+            for f in as_completed(fut_map):
+                t, sd, atr_series, df = fut_map[f]
+                try:
+                    strategies_result = f.result()
                 except Exception as e:
-                    logging.warning(f'SmartScanner: skip {ticker} — fetch exception: {e}')
-                    skipped_count += 1
-                    total_processed += 1
-                    if progress_fn:
-                        progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
-                    continue
+                    logging.warning(f'SmartScanner: {t} process worker failed: {e}')
+                    strategies_result = {}
 
-                df = candles_to_df(stock_data)
-                atr_series = None
-                if df is not None and len(df) > 0:
-                    atr_series = calc_atr(df, base_params.get('atr_period', 14))
-
-                def _run_strategy(sid):
-                    params = deepcopy(base_params)
-                    engine = BacktestEngine(
-                        strategy=sid,
-                        capital=params.get('capital', 1_000_000),
-                        risk_per_trade=params.get('risk_per_trade', 0.02),
-                        atr_sl=params.get('atr_sl', 1.0),
-                        atr_tp=params.get('atr_tp', 2.0),
-                        min_hits=params.get('min_hits', 5),
-                        max_hold=params.get('max_hold', 20),
-                        commission=params.get('commission', 0.0005),
-                        entry_type=params.get('entry_type', 0),
-                        _precomputed_atr=atr_series,
-                    )
-                    try:
-                        trades, metrics = engine.run(stock_data)
-                    except ModuleNotFoundError as e:
-                        logging.error(
-                            'SmartScanner: STRATEGY %s unavailable in bundle — '
-                            'check PyInstaller hiddenimports. ticker=%s err=%s',
-                            sid, ticker, e,
-                        )
-                        metrics = {}
-                        trades = []
-                    except Exception as e:
-                        logging.warning(f'SmartScanner: {ticker} strategy={sid} engine.run() failed: {e}')
-                        metrics = {}
-                        trades = []
-                    score = calc_composite(metrics, min_trades)
-                    signal = _calc_signal(trades, stock_data, params,
-                                          _precomputed_atr_series=atr_series,
-                                          _precomputed_df=df)
-                    return sid, {
-                        'metrics': metrics,
-                        'trades': trades,
-                        'signal': signal,
-                        'score': score,
-                    }
-
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-
-                strategies_result = {}
                 best_strategy_id = None
                 best_score = -1.0
-                completed_in_ticker = 0
+                for sid, res in strategies_result.items():
+                    if res['score'] > best_score:
+                        best_score = res['score']
+                        best_strategy_id = sid
 
-                with ThreadPoolExecutor(max_workers=min(8, len(strategy_ids))) as pool:
-                    fut_map = {pool.submit(_run_strategy, sid): sid for sid in strategy_ids}
-                    for f in as_completed(fut_map):
-                        sid, result = f.result()
-                        strategies_result[sid] = result
-                        if result['score'] > best_score:
-                            best_score = result['score']
-                            best_strategy_id = sid
-                        completed_in_ticker += 1
-                        if progress_fn:
-                            step = total_processed * len(strategy_ids) + completed_in_ticker
-                            progress_fn(step, total_steps, ticker, strategy_names[sid])
-
+                sector = ticker_to_sector.get(t, '')
                 entry = {
-                    'ticker': ticker,
+                    'ticker': t,
                     'sector': sector,
                     'strategies': strategies_result,
                     'best_strategy': best_strategy_id,
                     'best_score': best_score,
                 }
-                entry.update(self._best_info(strategies_result, best_strategy_id))
+                if best_strategy_id and best_strategy_id in strategies_result:
+                    s = strategies_result[best_strategy_id]
+                    entry['best_metrics'] = s['metrics']
+                    entry['best_signal'] = s['signal']
+                else:
+                    entry['best_metrics'] = {}
+                    entry['best_signal'] = {'action': 'NONE'}
+
                 self.results.append(entry)
                 total_processed += 1
+                if progress_fn:
+                    step = total_processed * len(strategy_ids)
+                    progress_fn(step, total_steps, t, '')
 
         logging.info(f'SmartScanner: done. tested={len(self.results)} skipped={skipped_count} of {total_tickers}')
         self.results.sort(key=lambda r: r.get('best_score', -1), reverse=True)
