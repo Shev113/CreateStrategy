@@ -49,6 +49,7 @@ class BacktestEngine:
                  exit_assumption=0,
                  slippage_bps=5,
                  max_position_pct=5.0,
+                 _precomputed_atr=None,
                  **strategy_kwargs):
         self.capital = capital
         self.initial_capital = capital
@@ -87,6 +88,7 @@ class BacktestEngine:
         self._final_levels = []
         self._closed_trades = []  # for Kelly estimation
         self.signal_recorder = None  # callable(ticker, side, price, sl, tp, entered, date=None)
+        self._precomputed_atr = _precomputed_atr
 
     def _calc_position_size(self, capital, entry_price, sl_price, atr):
         if self.bankrupted:
@@ -226,7 +228,10 @@ class BacktestEngine:
                 [], self.initial_capital, self.capital,
                 candles_df=df, include_advanced=True)
 
-        atr_series = calc_atr(df, self.atr_period)
+        if self._precomputed_atr is not None:
+            atr_series = self._precomputed_atr
+        else:
+            atr_series = calc_atr(df, self.atr_period)
 
         tolerance = self.tolerance
         if tolerance is None:

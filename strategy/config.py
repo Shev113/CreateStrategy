@@ -1159,10 +1159,17 @@ def get_strategy_params(strategy_id):
     return list(registry['params']) + list(EXIT_STRATEGY_PARAMS)
 
 
+_STRATEGY_FUNC_CACHE = {}
+
+
 def get_strategy_func(strategy_id):
     import importlib
     import logging
     import sys
+
+    cached = _STRATEGY_FUNC_CACHE.get(strategy_id)
+    if cached is not None:
+        return cached
 
     registry = STRATEGY_REGISTRY.get(strategy_id)
     if not registry:
@@ -1180,7 +1187,9 @@ def get_strategy_func(strategy_id):
             module_path, strategy_id, sys.path, e,
         )
         raise
-    return getattr(module, func_name)
+    func = getattr(module, func_name)
+    _STRATEGY_FUNC_CACHE[strategy_id] = func
+    return func
 
 
 def get_default_params(strategy_id):

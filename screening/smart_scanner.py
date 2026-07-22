@@ -26,15 +26,19 @@ def calc_composite(metrics, min_trades=30):
     return ret * 0.01
 
 
-def _calc_signal(trades, stock_data, params):
+def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _precomputed_df=None):
     if not trades or not stock_data:
         return {'action': 'NONE', 'level': None, 'strength': None}
     try:
         last_price = float(stock_data[-1][1])
-        df = candles_to_df(stock_data)
+        df = _precomputed_df
+        if df is None:
+            df = candles_to_df(stock_data)
         if df is None or len(df) == 0:
             return {'action': 'NONE', 'level': None, 'strength': None}
-        atr_series = calc_atr(df, params.get('atr_period', 14))
+        atr_series = _precomputed_atr_series
+        if atr_series is None:
+            atr_series = calc_atr(df, params.get('atr_period', 14))
         if atr_series.empty or atr_series.isna().iloc[-1]:
             return {'action': 'NONE', 'level': None, 'strength': None}
         atr_value = atr_series.iloc[-1]
@@ -108,17 +112,13 @@ class SmartScanner:
                         progress_fn(total_processed * len(strategy_ids), total_steps, ticker, 'SKIP')
                     continue
 
-                strategies_result = {}
-                best_strategy_id = None
-                best_score = -1.0
+                df = candles_to_df(stock_data)
+                atr_series = None
+                if df is not None and len(df) > 0:
+                    atr_series = calc_atr(df, base_params.get('atr_period', 14))
 
-                for sid in strategy_ids:
-                    if progress_fn:
-                        step = total_processed * len(strategy_ids) + strategy_ids.index(sid)
-                        progress_fn(step, total_steps, ticker, strategy_names[sid])
-
+                def _run_strategy(sid):
                     params = deepcopy(base_params)
-
                     engine = BacktestEngine(
                         strategy=sid,
                         capital=params.get('capital', 1_000_000),
@@ -129,8 +129,8 @@ class SmartScanner:
                         max_hold=params.get('max_hold', 20),
                         commission=params.get('commission', 0.0005),
                         entry_type=params.get('entry_type', 0),
+                        _precomputed_atr=atr_series,
                     )
-
                     try:
                         trades, metrics = engine.run(stock_data)
                     except ModuleNotFoundError as e:
@@ -145,20 +145,36 @@ class SmartScanner:
                         logging.warning(f'SmartScanner: {ticker} strategy={sid} engine.run() failed: {e}')
                         metrics = {}
                         trades = []
-
                     score = calc_composite(metrics, min_trades)
-                    if score > best_score:
-                        best_score = score
-                        best_strategy_id = sid
-
-                    signal = _calc_signal(trades, stock_data, params)
-
-                    strategies_result[sid] = {
+                    signal = _calc_signal(trades, stock_data, params,
+                                          _precomputed_atr_series=atr_series,
+                                          _precomputed_df=df)
+                    return sid, {
                         'metrics': metrics,
                         'trades': trades,
                         'signal': signal,
                         'score': score,
                     }
+
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                strategies_result = {}
+                best_strategy_id = None
+                best_score = -1.0
+                completed_in_ticker = 0
+
+                with ThreadPoolExecutor(max_workers=min(8, len(strategy_ids))) as pool:
+                    fut_map = {pool.submit(_run_strategy, sid): sid for sid in strategy_ids}
+                    for f in as_completed(fut_map):
+                        sid, result = f.result()
+                        strategies_result[sid] = result
+                        if result['score'] > best_score:
+                            best_score = result['score']
+                            best_strategy_id = sid
+                        completed_in_ticker += 1
+                        if progress_fn:
+                            step = total_processed * len(strategy_ids) + completed_in_ticker
+                            progress_fn(step, total_steps, ticker, strategy_names[sid])
 
                 entry = {
                     'ticker': ticker,
