@@ -422,6 +422,17 @@ STRATEGY_GUIDE = {
         ),
         'example_params': 'bc_period=20, bc_vol_period=30',
     },
+    'ensemble': {
+        'author': 'N.N.',
+        'source': 'Сборная стратегия',
+        'logic': (
+            'Ensemble — комбинация сигналов нескольких базовых стратегий. '
+            'Каждая базовая стратегия голосует BUY/SELL/WAIT. '
+            'Итоговый сигнал — мажоритарное голосование с порогом согласия. '
+            'Используются стратегии: bounce, breakout, rsi_levels, fisher, trend.'
+        ),
+        'example_params': 'ensemble_min_agree=3, ensemble_vote_weighted=1',
+    },
 }
 
 

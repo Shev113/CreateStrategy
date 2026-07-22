@@ -242,11 +242,4 @@ class SmartScanner:
         self.skipped_count = skipped_count
         return self.results
 
-    def _best_info(self, strategies, best_id):
-        if not best_id or best_id not in strategies:
-            return {'best_metrics': {}, 'best_signal': {'action': 'NONE'}}
-        s = strategies[best_id]
-        return {
-            'best_metrics': s['metrics'],
-            'best_signal': s['signal'],
-        }
+
