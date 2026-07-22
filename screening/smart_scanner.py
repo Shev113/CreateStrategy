@@ -63,9 +63,14 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
         return {'action': 'NONE', 'level': None, 'strength': None}
 
 
-def _run_ticker_strategies(stock_data, base_params, min_trades, atr_series, df, strategy_ids,
+def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
                             ticker='', progress_queue=None):
     """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
+    df = candles_to_df(stock_data)
+    atr_series = None
+    if df is not None and len(df) > 0:
+        atr_series = calc_atr(df, base_params.get('atr_period', 14))
+
     results = {}
     for sid in strategy_ids:
         params = deepcopy(base_params)
@@ -149,17 +154,13 @@ class SmartScanner:
                 if d is not None:
                     data_map[t] = d
 
-        # Phase 2: build df + atr for each ticker (fast, in main process)
+        # Phase 2: collect tickers with data (df/atr computed inside worker to avoid pickle overhead)
         ticker_prepared = []
         for t in tickers:
             sd = data_map.get(t)
             if sd is None:
                 continue
-            df = candles_to_df(sd)
-            atr_series = None
-            if df is not None and len(df) > 0:
-                atr_series = calc_atr(df, base_params.get('atr_period', 14))
-            ticker_prepared.append((t, sd, atr_series, df))
+            ticker_prepared.append((t, sd))
 
         # Phase 3: run strategies for all tickers in parallel (CPU bound)
         total_processed = 0
@@ -196,14 +197,14 @@ class SmartScanner:
 
         with ProcessPoolExecutor(max_workers=min(6, len(ticker_prepared) or 1)) as pool:
             fut_map = {}
-            for t, sd, atr_series, df in ticker_prepared:
+            for t, sd in ticker_prepared:
                 fut = pool.submit(_run_ticker_strategies, sd, base_params,
-                                  min_trades, atr_series, df, strategy_ids,
+                                  min_trades, strategy_ids,
                                   t, progress_queue)
-                fut_map[fut] = (t, sd, atr_series, df)
+                fut_map[fut] = (t, sd)
 
             for f in as_completed(fut_map):
-                t, sd, atr_series, df = fut_map[f]
+                t, sd = fut_map[f]
                 try:
                     strategies_result = f.result()
                 except Exception as e:
