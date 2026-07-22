@@ -1827,6 +1827,7 @@ class CreateStrategyApp:
 
         min_trades = params.pop('min_trades', 30)
         self._last_smart_params = params
+        selected_strategies = self.smart_scanner_ui.get_selected_strategies()
 
         def run_scan():
             try:
@@ -1837,6 +1838,7 @@ class CreateStrategyApp:
                     date_to=date_to,
                     base_params=params,
                     min_trades=min_trades,
+                    strategy_ids=selected_strategies,
                     progress_fn=lambda c, t, tick, sid_name: self.smart_scanner_ui.update_progress(c, t, tick, sid_name)
                 )
                 self._last_smart_results = results
@@ -2828,13 +2830,17 @@ class CreateStrategyApp:
 
                 def show():
                     self.news_ui.update_news(results)
-                    self.news_ui.status_label.configure(
-                        text=f'{len(results)} новостей проанализировано')
+                    if results:
+                        provider = config.get('provider', 'github_models')
+                        self.news_ui.status_label.configure(
+                            text=f'{len(results)} новостей проанализировано (провайдер: {provider})')
+                    else:
+                        self.news_ui.status_label.configure(text='Нет новостей для анализа')
                 self.root.after(0, show)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                err_msg = str(e)[:80]
+                err_msg = str(e)
                 self.root.after(0, lambda: self.news_ui.status_label.configure(
                     text=f'Ошибка: {err_msg}'))
 

@@ -108,14 +108,18 @@ class SmartScanner:
         self.results = []
 
     def scan(self, sectors, date_from, date_to, base_params,
-             min_trades=30, progress_fn=None):
+             min_trades=30, progress_fn=None, strategy_ids=None):
         self.results = []
         all_tickers = self.sector_db.get_tickers(sectors)
         if not all_tickers:
             return self.results
 
         sector_list = [s for s in sectors if s in self.sector_db.get_all_sectors()]
-        strategy_ids = list(STRATEGY_REGISTRY.keys())
+
+        if strategy_ids:
+            strategy_ids = [s for s in strategy_ids if s in STRATEGY_REGISTRY]
+        if not strategy_ids:
+            strategy_ids = list(STRATEGY_REGISTRY.keys())
         strategy_names = {k: v['name'] for k, v in STRATEGY_REGISTRY.items()}
 
         ticker_to_sector = {}

@@ -61,21 +61,55 @@ class SettingsDialog:
         nb.add(tab_cloud, text='Облако')
         nb.add(tab_strategies, text='Стратегии')
 
-        self._build_watchlist(tab_watchlist)
-        self._build_automation(tab_auto)
-        self._build_cloud(tab_cloud)
-        self._build_strategies(tab_strategies)
+        self._scrollable_tabs = []
+        self._build_watchlist(self._make_scrollable(tab_watchlist))
+        self._build_automation(self._make_scrollable(tab_auto))
+        self._build_cloud(self._make_scrollable(tab_cloud))
+        self._build_strategies(self._make_scrollable(tab_strategies))
 
         btn_frame = ttk.Frame(self._dialog)
         btn_frame.pack(fill='x', padx=5, pady=(0, 5))
         ttk.Button(btn_frame, text='Закрыть', command=self._on_close).pack(side='right')
 
     def _on_close(self):
+        for canvas in getattr(self, '_scrollable_tabs', []):
+            try:
+                canvas.unbind_all('<MouseWheel>')
+            except Exception:
+                pass
         if self.main_app is not None:
             self.main_app.watchlist_ui = None
         if self._dialog and self._dialog.winfo_exists():
             self._dialog.destroy()
         self._dialog = None
+
+    def _make_scrollable(self, parent):
+        """Wrap a tab frame in a Canvas + Scrollbar; returns inner frame for content."""
+        canvas = tk.Canvas(parent, highlightthickness=0, borderwidth=0)
+        vsb = ttk.Scrollbar(parent, orient='vertical', command=canvas.yview)
+        inner = ttk.Frame(canvas)
+
+        inner.bind('<Configure>',
+                   lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=inner, anchor='nw', tags='inner')
+        canvas.configure(yscrollcommand=vsb.set)
+
+        # Inner frame expands to canvas width so widgets span full width
+        def _on_canvas_resize(event):
+            canvas.itemconfigure('inner', width=event.width)
+        canvas.bind('<Configure>', _on_canvas_resize)
+
+        # Mousewheel scroll only when pointer is over this canvas
+        def _on_wheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _on_wheel))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+
+        canvas.pack(side='left', fill='both', expand=True)
+        vsb.pack(side='right', fill='y')
+
+        self._scrollable_tabs.append(canvas)
+        return inner
 
     def _build_watchlist(self, parent):
         if self.watchlist_ui_class and self.watchlist_callbacks:

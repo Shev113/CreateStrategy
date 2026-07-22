@@ -123,7 +123,8 @@ class NewsUI:
         ttk.Label(frame, text='Провайдер:').grid(row=row, column=0, sticky='e', pady=3)
         provider_var = tk.StringVar(value=config.get('provider', 'rules'))
         provider_cb = ttk.Combobox(frame, textvariable=provider_var,
-                                    values=['rules', 'groq'], width=20, state='readonly')
+                                    values=['github_models', 'groq', 'rules'],
+                                    width=20, state='readonly')
         provider_cb.grid(row=row, column=1, sticky='w', pady=3, padx=5)
 
         row += 1

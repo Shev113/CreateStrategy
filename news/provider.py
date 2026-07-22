@@ -10,13 +10,28 @@ from utils import app_dir
 AI_CONFIG_PATH = os.path.join(app_dir(), 'results', 'ai_config.json')
 
 DEFAULT_AI_CONFIG = {
-    'provider': 'rules',
+    'provider': 'github_models',
     'api_key': '',
-    'model': 'llama-3.3-70b-versatile',
-    'endpoint': 'https://api.groq.com/openai/v1',
+    'model': 'deepseek-large-fast',
+    'endpoint': 'https://models.github.ai/inference',
     'auto_scan_interval_min': 15,
     'max_news': 50,
 }
+
+
+def _read_github_key() -> str:
+    """Try to read GitHub Models API key from opencode.json."""
+    try:
+        cfg_path = os.path.join(os.path.expanduser('~'), '.config', 'opencode', 'opencode.json')
+        if os.path.exists(cfg_path):
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            key = data.get('provider', {}).get('github', {}).get('apiKey', '')
+            if key:
+                return key
+    except Exception:
+        pass
+    return ''
 
 
 class AIProvider(ABC):
@@ -146,8 +161,60 @@ class GroqProvider(AIProvider):
             return result
         except Exception as e:
             logging.warning(f'Groq API error: {e}')
-            fallback = RuleBasedProvider()
-            return fallback.analyze(title, text)
+            raise
+
+
+class GitHubModelsProvider(AIProvider):
+    SYSTEM_PROMPT = """Ты — аналитик российского фондового рынка. Проанализируй финансовую новость.
+Ответь ТОЛЬКО в формате JSON (без markdown, без ```):
+{
+  "sentiment": "positive" | "neutral" | "negative",
+  "score": -1.0 .. 1.0,
+  "impact": 1..5,
+  "tickers": ["TICKER1", "TICKER2"],
+  "summary": "Краткое резюме 1-2 предложения",
+  "recommendation": "наблюдать" | "действовать" | "игнорировать"
+}"""
+
+    def __init__(self, api_key: str, model: str = 'deepseek-large-fast',
+                 endpoint: str = 'https://models.github.ai/inference'):
+        self._api_key = api_key
+        self._model = model
+        self._endpoint = endpoint.rstrip('/')
+
+    def analyze(self, title: str, text: str) -> Dict:
+        import requests as req
+        url = f'{self._endpoint}/v1/chat/completions'
+        headers = {
+            'Authorization': f'Bearer {self._api_key}',
+            'Content-Type': 'application/json',
+        }
+        user_msg = f'Заголовок: {title}\n\nТекст: {text[:2000]}'
+        payload = {
+            'model': self._model,
+            'messages': [
+                {'role': 'system', 'content': self.SYSTEM_PROMPT},
+                {'role': 'user', 'content': user_msg},
+            ],
+            'temperature': 0.1,
+            'max_tokens': 500,
+        }
+        try:
+            resp = req.post(url, json=payload, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            content = data['choices'][0]['message']['content'].strip()
+            content = content.strip('`').strip()
+            if content.startswith('json'):
+                content = content[4:].strip()
+            result = json.loads(content)
+            for key in ('sentiment', 'score', 'impact', 'tickers', 'summary', 'recommendation'):
+                result.setdefault(key, '' if key in ('summary', 'recommendation') else
+                                       [] if key == 'tickers' else 0)
+            return result
+        except Exception as e:
+            logging.warning(f'GitHub Models API error: {e}')
+            raise
 
 
 def load_ai_config() -> Dict:
@@ -174,11 +241,28 @@ def save_ai_config(cfg: Dict):
 
 def create_provider(config: Dict = None, known_tickers=None) -> AIProvider:
     cfg = config or load_ai_config()
-    provider_name = cfg.get('provider', 'rules')
-    if provider_name == 'groq' and cfg.get('api_key'):
+    provider_name = cfg.get('provider', 'github_models')
+
+    if provider_name == 'github_models':
+        api_key = cfg.get('api_key') or _read_github_key()
+        if not api_key:
+            logging.warning('GitHub Models: API key not found. Using rule-based fallback.')
+            return RuleBasedProvider(known_tickers=known_tickers)
+        return GitHubModelsProvider(
+            api_key=api_key,
+            model=cfg.get('model', 'deepseek-large-fast'),
+            endpoint=cfg.get('endpoint', 'https://models.github.ai/inference'),
+        )
+
+    if provider_name == 'groq':
+        api_key = cfg.get('api_key')
+        if not api_key:
+            logging.warning('Groq: API key not set. Using rule-based fallback.')
+            return RuleBasedProvider(known_tickers=known_tickers)
         return GroqProvider(
-            api_key=cfg['api_key'],
+            api_key=api_key,
             model=cfg.get('model', 'llama-3.3-70b-versatile'),
             endpoint=cfg.get('endpoint', 'https://api.groq.com/openai/v1'),
         )
+
     return RuleBasedProvider(known_tickers=known_tickers)

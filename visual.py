@@ -1333,9 +1333,39 @@ class SmartScannerUI:
         row += 1
 
         n_strategies = len(self._strategy_names)
-        ttk.Label(parent, text=f"Внимание: тестируются {n_strategies} стратегий для каждого тикера",
-                  font=('', 8, 'italic'), foreground='gray').grid(
-            row=row, column=0, columnspan=2, sticky='w', padx=5, pady=(0, 2))
+        ttk.Label(parent, text=f"Стратегии ({n_strategies} шт.):",
+                  font=('', 10, 'bold')).grid(
+            row=row, column=0, columnspan=2, sticky='w', padx=5, pady=(5, 0))
+        row += 1
+
+        self.strategy_vars = {}
+        strat_frame = ttk.Frame(parent)
+        strat_frame.grid(row=row, column=0, columnspan=2, sticky='ew', padx=5)
+        row += 1
+
+        cols = 3
+        for idx, (sid, name) in enumerate(self._strategy_names):
+            var = tk.BooleanVar(value=True)
+            self.strategy_vars[sid] = var
+            cb = ttk.Checkbutton(strat_frame, text=name, variable=var)
+            cb.grid(row=idx // cols, column=idx % cols, sticky='w', padx=5, pady=1)
+
+        def select_all():
+            for v in self.strategy_vars.values():
+                v.set(True)
+
+        def deselect_all():
+            for v in self.strategy_vars.values():
+                v.set(False)
+
+        btn_row = (len(self._strategy_names) - 1) // cols + 1
+        ttk.Button(strat_frame, text='Выбрать все',
+                   command=select_all).grid(row=btn_row, column=0, sticky='w', padx=5, pady=2)
+        ttk.Button(strat_frame, text='Снять все',
+                   command=deselect_all).grid(row=btn_row, column=1, sticky='w', padx=5, pady=2)
+
+        ttk.Separator(parent, orient='horizontal').grid(
+            row=row, column=0, columnspan=2, sticky='ew', pady=3)
         row += 1
 
         date_frame = ttk.Frame(parent)
@@ -1443,6 +1473,9 @@ class SmartScannerUI:
 
     def get_selected_sectors(self):
         return [s for s, v in self.sector_vars.items() if v.get()]
+
+    def get_selected_strategies(self):
+        return [sid for sid, v in self.strategy_vars.items() if v.get()]
 
     def set_running(self, running):
         if running:
