@@ -1775,7 +1775,10 @@ class CreateStrategyApp:
 
                 self._last_scan_results = results
                 n_custom = len(scanner.ticker_overrides_used)
-                report = generate_report(results, top_n=5, params=params)
+                report = generate_report(
+                    [r for r in results if r.get('metrics', {}).get('total_return', 0) > 0],
+                    top_n=5, params=params
+                )
                 if n_custom:
                     report += f"\n  Бумаг с индивид. настройками: {n_custom}"
                 if fund_filter:
