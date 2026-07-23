@@ -2156,8 +2156,8 @@ class CreateStrategyApp:
         """Поставить лимитный ордер на вход по уровню сигнала."""
         signal = self.app._last_signal
         params = self.app._last_params
-        if not signal or signal.get('action') not in ('BUY', 'SELL'):
-            mb.showinfo('В ожидание', 'Нет активного сигнала BUY/SELL.')
+        if not signal or signal.get('action') not in ('BUY', 'SELL', 'WAIT'):
+            mb.showinfo('В ожидание', 'Нет активного сигнала BUY/SELL/WAIT.')
             return
         if not params:
             mb.showinfo('В ожидание', 'Нет параметров. Запустите backtest.')
@@ -2185,8 +2185,9 @@ class CreateStrategyApp:
 
         capital = params.get('capital', 1_000_000)
         risk_per_trade = params.get('risk_per_trade', 0.02)
+        effective_action = signal.get('side', signal['action'])
         side_map = {'BUY': 'LONG', 'SELL': 'SHORT'}
-        side = side_map.get(signal['action'], signal['action'])
+        side = side_map.get(effective_action, 'LONG')
         qty = calc_position_qty(capital, risk_per_trade, entry_price, sl_price)
         volume = calc_position_volume(capital, risk_per_trade, entry_price, sl_price)
 

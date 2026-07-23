@@ -4,6 +4,7 @@ import time
 import traceback
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 
 from .sectors import SectorDB
 from .levels_strength import DEFAULT_LAST_CANDLES, calculate_level_strength, get_best_level_signal
@@ -63,10 +64,23 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
 
 
 def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
-                            ticker='', _precomputed_df=None, _precomputed_atr=None):
+                            ticker=''):
     """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
     try:
         logger = logging.getLogger(__name__)
+        try:
+            df = candles_to_df(stock_data)
+        except Exception as e:
+            logger.exception('SmartScanner: %s candles_to_df failed: %s', ticker, e)
+            df = None
+        atr_series = None
+        if df is not None and len(df) > 0:
+            try:
+                atr_period = base_params.get('atr_period', 14)
+                atr_series = calc_atr(df, atr_period)
+            except Exception as e:
+                logger.exception('SmartScanner: %s calc_atr failed: %s', ticker, e)
+
         results = {}
         for sid in strategy_ids:
             params = deepcopy(base_params)
@@ -81,7 +95,7 @@ def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
                 commission=params.get('commission', 0.0005),
                 entry_type=params.get('entry_type', 0),
                 atr_period=params.get('atr_period', 14),
-                _precomputed_atr=_precomputed_atr,
+                _precomputed_atr=atr_series,
             )
             try:
                 trades, metrics = engine.run(stock_data)
@@ -91,8 +105,8 @@ def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
                 trades = []
             score = calc_composite(metrics, min_trades)
             signal = _calc_signal(trades, stock_data, params,
-                                  _precomputed_atr_series=_precomputed_atr,
-                                  _precomputed_df=_precomputed_df)
+                                  _precomputed_atr_series=atr_series,
+                                  _precomputed_df=df)
             results[sid] = {
                 'metrics': metrics,
                 'trades': trades,
@@ -137,6 +151,7 @@ class SmartScanner:
         total_steps = total_tickers * len(strategy_ids)
 
         # Phase 1: fetch all data in parallel (I/O bound)
+        logging.info(f'SmartScanner: Phase 1 — fetching {total_tickers} tickers')
         data_map = {}
         with ThreadPoolExecutor(max_workers=5) as pool:
             def _fetch(t):
@@ -153,39 +168,27 @@ class SmartScanner:
                 if d is not None:
                     data_map[t] = d
 
-        # Phase 2: precompute df/atr in main process (errors visible in log)
+        # Phase 2: collect tickers with data (df/atr computed inside worker)
         ticker_prepared = []
         for t in tickers:
             sd = data_map.get(t)
             if sd is None:
                 continue
-            try:
-                df = candles_to_df(sd)
-            except Exception as e:
-                logging.exception('SmartScanner: %s candles_to_df failed: %s', t, e)
-                continue
-            if df is None or len(df) == 0:
-                continue
-            try:
-                atr_period = base_params.get('atr_period', 14)
-                atr_series = calc_atr(df, atr_period)
-            except Exception as e:
-                logging.exception('SmartScanner: %s calc_atr failed: %s', t, e)
-                continue
-            ticker_prepared.append((t, sd, df, atr_series))
+            ticker_prepared.append((t, sd))
 
         # Phase 3: run strategies for all tickers in parallel (CPU bound)
         total_processed = 0
         skipped_count = total_tickers - len(ticker_prepared)
+        logging.info(f'SmartScanner: Phase 2 done — {len(ticker_prepared)} tickers prepared, {skipped_count} skipped')
 
-        with ProcessPoolExecutor(max_workers=min(6, len(ticker_prepared) or 1)) as pool:
+        with ProcessPoolExecutor(max_workers=min(4, len(ticker_prepared) or 1)) as pool:
             fut_map = {}
-            for t, sd, df, atr in ticker_prepared:
+            for t, sd in ticker_prepared:
                 fut = pool.submit(_run_ticker_strategies, sd, base_params,
-                                  min_trades, strategy_ids,
-                                  t, df, atr)
+                                  min_trades, strategy_ids, t)
                 fut_map[fut] = t
 
+            logging.info(f'SmartScanner: Phase 3 — started {len(fut_map)} workers')
             progress_start = time.monotonic()
             total_processed_tickers = 0
 
@@ -193,6 +196,9 @@ class SmartScanner:
                 t = fut_map[f]
                 try:
                     strategies_result = f.result()
+                except BrokenProcessPool:
+                    logging.error('SmartScanner: ProcessPoolExecutor broken, aborting')
+                    break
                 except Exception as e:
                     logging.exception(f'SmartScanner: {t} worker failed: {e}')
                     strategies_result = {}

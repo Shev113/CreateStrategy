@@ -142,6 +142,7 @@ def get_best_level_signal(levels_strength, current_price, atr, threshold_mult=0.
                 'distance': round(dist, 2),
                 'sl_price': sl,
                 'tp_price': tp,
+                'side': action,
             }
 
     return {'action': 'NONE', 'level': None, 'strength': None, 'sl_price': None, 'tp_price': None}

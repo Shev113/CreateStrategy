@@ -618,12 +618,14 @@ class StockAppVisual:
     def set_last_analysis(self, signal, params):
         self._last_signal = signal
         self._last_params = params
-        if signal and signal.get('action') in ('BUY', 'SELL'):
-            self.diary_btn.config(state='normal')
+        if signal and signal.get('action') in ('BUY', 'SELL', 'WAIT'):
             self.pending_btn.config(state='normal')
         else:
-            self.diary_btn.config(state='disabled')
             self.pending_btn.config(state='disabled')
+        if signal and signal.get('action') in ('BUY', 'SELL'):
+            self.diary_btn.config(state='normal')
+        else:
+            self.diary_btn.config(state='disabled')
 
     def display_recommendation(self, signal, params=None):
         action = signal.get('action', 'NONE')
@@ -1236,9 +1238,9 @@ class ScannerUI:
 
 
 class SmartScannerUI:
-    COLUMNS = ('rank', 'ticker', 'sector', 'best_strategy', 'total_return', 'sharpe', 'trades', 'signal_action')
+    COLUMNS = ('rank', 'ticker', 'listing', 'sector', 'best_strategy', 'total_return', 'sharpe', 'trades', 'signal_action')
     HEADERS = {
-        'rank': '№', 'ticker': 'Тикер', 'sector': 'Сектор',
+        'rank': '№', 'ticker': 'Тикер', 'listing': 'Листинг', 'sector': 'Сектор',
         'best_strategy': 'Лучшая стратегия',
         'total_return': 'Доходность',
         'sharpe': 'Sharpe',
@@ -1246,7 +1248,7 @@ class SmartScannerUI:
         'signal_action': 'Сигнал',
     }
     WIDTHS = {
-        'rank': 35,         'ticker': 120, 'sector': 170,
+        'rank': 35,         'ticker': 100, 'listing': 70, 'sector': 170,
         'best_strategy': 140,
         'total_return': 90,
         'sharpe': 70,
@@ -1522,9 +1524,17 @@ class SmartScannerUI:
 
             ticker_text = r['ticker']
             lvl = r.get('listing_level')
-            if lvl is None or lvl == 0:
-                ticker_text += ' ⚠ВнеКС'
-            values = (rank, ticker_text, r['sector'], best_name, ret_str, sh_str, trades_str, action_short)
+            if lvl == 1:
+                listing_display = 'Ⅰ'
+            elif lvl == 2:
+                listing_display = 'Ⅱ'
+            elif lvl == 3:
+                listing_display = 'Ⅲ'
+            elif lvl == 0:
+                listing_display = '⚠ВнеКС'
+            else:
+                listing_display = '—'
+            values = (rank, ticker_text, listing_display, r['sector'], best_name, ret_str, sh_str, trades_str, action_short)
             tags = ()
             if isinstance(ret, (int, float)):
                 tags = ('positive',) if ret > 0 else ('negative',)
