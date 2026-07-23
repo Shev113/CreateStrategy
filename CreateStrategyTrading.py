@@ -12,8 +12,11 @@ from datetime import datetime, timedelta
 
 multiprocessing.freeze_support()
 
-import faulthandler
-faulthandler.enable()
+try:
+    import faulthandler
+    faulthandler.enable()
+except Exception:
+    pass
 
 CRASH_LOG = os.path.join(
     os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.getcwd(),
@@ -28,7 +31,8 @@ def _global_excepthook(exc_type, exc_value, exc_tb):
             f.write('\n')
     except Exception:
         pass
-    sys.__excepthook__(exc_type, exc_value, exc_tb)
+    if sys.__excepthook__:
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
 
 def _thread_excepthook(args):
     try:
