@@ -1856,6 +1856,33 @@ class CreateStrategyApp:
                 self.root.after(0, lambda: self.smart_scanner_ui.show_results(results))
                 if msg:
                     self.root.after(0, lambda: self.smart_scanner_ui.status_var.set(msg))
+                try:
+                    for r in results:
+                        sig = r.get('best_signal', {})
+                        action = sig.get('action', 'NONE')
+                        if action not in ('BUY', 'SELL'):
+                            continue
+                        ticker = r.get('ticker', '')
+                        side = 'Лонг' if action == 'BUY' else 'Шорт'
+                        price = sig.get('level') or sig.get('last_price')
+                        sl = sig.get('sl_price')
+                        tp = sig.get('tp_price')
+                        strategy_id = r.get('best_strategy', '')
+                        existing = self.signal_storage.get_signals(ticker=ticker, limit=5)
+                        recent = [s for s in existing if s['strategy'] == strategy_id and s['side'] == side]
+                        if not recent:
+                            self.signal_storage.add_signal(
+                                ticker=ticker, side=side, price=price,
+                                strategy=strategy_id, sl=sl, tp=tp,
+                            )
+                except Exception:
+                    logging.exception('Failed to save smart scanner signals')
+                finally:
+                    self.root.after(0, lambda: self.signal_journal_ui.update_signals(
+                        self.signal_storage.get_signals(limit=200)))
+                    self.root.after(0, lambda: self.signal_journal_ui.update_strategies(
+                        self.signal_storage.get_strategies()))
+                    self.root.after(0, self._update_top_signals)
             except Exception as e:
                 self.root.after(0, lambda: self.smart_scanner_ui.status_var.set(f"Ошибка: {str(e)}"))
             finally:
