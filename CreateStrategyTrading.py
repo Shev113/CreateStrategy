@@ -1289,7 +1289,7 @@ class CreateStrategyApp:
                 txt.tag_bind(tag_name, '<Leave>',
                              lambda e, tn=tag_name: txt.tag_config(tn, foreground='blue'))
         else:
-            txt.insert(tk.END, "Не найдено комбинаций с достаточным числом сделок (>=5).\n")
+            txt.insert(tk.END, "Нет результатов оптимизации.\n")
         txt.insert(tk.END, "=" * 50)
 
     def _apply_optimized_params(self, params_dict):

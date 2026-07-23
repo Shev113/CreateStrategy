@@ -135,10 +135,6 @@ def _build_param_grid(strategy_id):
 
 
 def score_result(metrics):
-    trades = metrics.get('total_trades', 0)
-    if trades < 30:
-        return -1
-
     sharpe = max(metrics.get('sharpe', 0), 0)
     pf = max(metrics.get('profit_factor', 0), 0)
     dd = max(metrics.get('max_drawdown', 0), 0)
@@ -182,8 +178,7 @@ def optimize(strategy_id, candles_list, default_params=None, metric='composite',
         trades, metrics = engine.run(is_candles)
 
         sc = score_result(metrics)
-        if sc >= 0:
-            results.append({
+        results.append({
                 'params': {k: v for k, v in zip(keys, combo)},
                 'score': sc,
                 'sharpe': metrics.get('sharpe', 0),
