@@ -19,6 +19,68 @@ DEFAULT_AI_CONFIG = {
 }
 
 
+GITHUB_MODELS = [
+    'deepseek-large-fast',
+    'deepseek-chat',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'Meta-Llama-3.1-405B-Instruct',
+    'Meta-Llama-3.1-8B-Instruct',
+    'Phi-3.5-mini-instruct',
+    'Mistral-large',
+    'Mixtral-8x7b',
+]
+
+GROQ_MODELS = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'mixtral-8x7b-32768',
+    'gemma-7b-it',
+    'gemma2-9b-it',
+    'deepseek-r1-distill-llama-70b',
+]
+
+PROVIDER_MODELS = {
+    'github_models': GITHUB_MODELS,
+    'groq': GROQ_MODELS,
+    'rules': [],
+}
+
+DEFAULT_MODELS = {
+    'github_models': 'deepseek-large-fast',
+    'groq': 'llama-3.3-70b-versatile',
+    'rules': '',
+}
+
+
+def fetch_available_models(provider: str, api_key: str, endpoint: str) -> List[str]:
+    if provider == 'rules':
+        return []
+    try:
+        import requests as req
+        url = f'{endpoint.rstrip("/")}/v1/models'
+        headers = {'Authorization': f'Bearer {api_key}'}
+        resp = req.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        api_models = []
+        for m in data.get('data', []):
+            mid = m.get('id')
+            if mid:
+                task = m.get('task', '')
+                if not task or task in ('chat-completion', 'chat', ''):
+                    api_models.append(mid)
+        seen = set()
+        combined = []
+        for m in api_models + PROVIDER_MODELS.get(provider, []):
+            if m not in seen:
+                seen.add(m)
+                combined.append(m)
+        return combined if combined else PROVIDER_MODELS.get(provider, [])
+    except Exception:
+        return list(PROVIDER_MODELS.get(provider, []))
+
+
 def _read_github_key() -> str:
     """Try to read GitHub Models API key from opencode.json."""
     try:

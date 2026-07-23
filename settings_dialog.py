@@ -4,7 +4,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from news.provider import load_ai_config, save_ai_config
+from news.provider import load_ai_config, save_ai_config, fetch_available_models, PROVIDER_MODELS, DEFAULT_MODELS
 from utils import app_dir
 
 
@@ -167,6 +167,46 @@ class SettingsDialog:
         main = ttk.Frame(parent, padding=15)
         main.pack(fill='both', expand=True)
 
+        def refresh_models(*_args):
+            prov = provider_var.get()
+            endpoint_var.set({
+                'github_models': 'https://models.github.ai/inference',
+                'groq': 'https://api.groq.com/openai/v1',
+                'rules': '',
+            }.get(prov, endpoint_var.get()))
+            if prov == 'rules':
+                model_cb.configure(values=[])
+                model_var.set('')
+                return
+            models = PROVIDER_MODELS.get(prov, [])
+            model_cb.configure(values=models)
+            cur = model_var.get()
+            if cur not in models:
+                model_var.set(DEFAULT_MODELS.get(prov, models[0] if models else ''))
+
+        def load_models():
+            prov = provider_var.get()
+            if prov == 'rules':
+                model_cb.configure(values=[])
+                model_var.set('')
+                return
+            key = key_var.get()
+            ep = endpoint_var.get()
+            model_btn.configure(text='Загрузка...', state='disabled')
+            status_var.set('')
+            main.update_idletasks()
+            try:
+                models = fetch_available_models(prov, key, ep)
+                model_cb.configure(values=models)
+                cur = model_var.get()
+                if cur not in models:
+                    model_var.set(DEFAULT_MODELS.get(prov, models[0] if models else ''))
+                status_var.set(f'Загружено {len(models)} моделей')
+            except Exception as e:
+                status_var.set(f'Ошибка загрузки: {e}')
+            finally:
+                model_btn.configure(text='Загрузить модели', state='normal')
+
         row = 0
         ttk.Label(main, text='Провайдер:', font=('Segoe UI', 10)).grid(
             row=row, column=0, sticky='e', pady=4)
@@ -175,6 +215,7 @@ class SettingsDialog:
                                     values=['github_models', 'groq', 'rules'],
                                     width=25, state='readonly')
         provider_cb.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+        provider_cb.bind('<<ComboboxSelected>>', refresh_models)
 
         row += 1
         ttk.Label(main, text='API ключ:', font=('Segoe UI', 10)).grid(
@@ -187,8 +228,12 @@ class SettingsDialog:
         ttk.Label(main, text='Модель:', font=('Segoe UI', 10)).grid(
             row=row, column=0, sticky='e', pady=4)
         model_var = tk.StringVar(value=config.get('model', 'deepseek-large-fast'))
-        model_entry = ttk.Entry(main, textvariable=model_var, width=40)
-        model_entry.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+        model_frame = ttk.Frame(main)
+        model_frame.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+        model_cb = ttk.Combobox(model_frame, textvariable=model_var, width=37, state='readonly')
+        model_cb.pack(side='left')
+        model_btn = ttk.Button(model_frame, text='Загрузить модели', command=load_models, width=16)
+        model_btn.pack(side='left', padx=(5, 0))
 
         row += 1
         ttk.Label(main, text='Эндпоинт:', font=('Segoe UI', 10)).grid(
@@ -232,18 +277,20 @@ class SettingsDialog:
             except Exception as e:
                 status_var.set(f'Ошибка: {e}')
 
+        def reset_defaults():
+            provider_var.set('github_models')
+            key_var.set('')
+            endpoint_var.set('https://models.github.ai/inference')
+            interval_var.set('15')
+            max_var.set('50')
+            status_var.set('')
+            refresh_models()
+
         row += 1
         btn_frame = ttk.Frame(main)
         btn_frame.grid(row=row, column=0, columnspan=2, pady=(12, 0))
         ttk.Button(btn_frame, text='Сохранить', command=save).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text='По умолчанию',
-                   command=lambda: [provider_var.set('github_models'),
-                                    key_var.set(''),
-                                    model_var.set('deepseek-large-fast'),
-                                    endpoint_var.set('https://models.github.ai/inference'),
-                                    interval_var.set('15'),
-                                    max_var.set('50'),
-                                    status_var.set('')]).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text='По умолчанию', command=reset_defaults).pack(side='left', padx=5)
 
         row += 1
         ttk.Label(main, textvariable=status_var, foreground='green',
@@ -252,6 +299,8 @@ class SettingsDialog:
 
         main.columnconfigure(0, weight=0)
         main.columnconfigure(1, weight=1)
+
+        provider_cb.after(100, refresh_models)
 
     def _build_strategies(self, parent):
         main = ttk.Frame(parent, padding=10)
