@@ -1,6 +1,7 @@
 import logging
 import math
 import time
+import traceback
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
@@ -64,40 +65,44 @@ def _calc_signal(trades, stock_data, params, _precomputed_atr_series=None, _prec
 def _run_ticker_strategies(stock_data, base_params, min_trades, strategy_ids,
                             ticker='', _precomputed_df=None, _precomputed_atr=None):
     """Module-level worker for ProcessPoolExecutor. Runs all strategies for one ticker."""
-    logger = logging.getLogger(__name__)
-    results = {}
-    for sid in strategy_ids:
-        params = deepcopy(base_params)
-        engine = BacktestEngine(
-            strategy=sid,
-            capital=params.get('capital', 1_000_000),
-            risk_per_trade=params.get('risk_per_trade', 0.02),
-            atr_sl=params.get('atr_sl', 1.0),
-            atr_tp=params.get('atr_tp', 2.0),
-            min_hits=params.get('min_hits', 5),
-            max_hold=params.get('max_hold', 20),
-            commission=params.get('commission', 0.0005),
-            entry_type=params.get('entry_type', 0),
-            atr_period=params.get('atr_period', 14),
-            _precomputed_atr=_precomputed_atr,
-        )
-        try:
-            trades, metrics = engine.run(stock_data)
-        except Exception as e:
-            logger.exception('SmartScanner: %s/%s engine.run failed: %s', ticker, sid, e)
-            metrics = {}
-            trades = []
-        score = calc_composite(metrics, min_trades)
-        signal = _calc_signal(trades, stock_data, params,
-                              _precomputed_atr_series=_precomputed_atr,
-                              _precomputed_df=_precomputed_df)
-        results[sid] = {
-            'metrics': metrics,
-            'trades': trades,
-            'signal': signal,
-            'score': score,
-        }
-    return results
+    try:
+        logger = logging.getLogger(__name__)
+        results = {}
+        for sid in strategy_ids:
+            params = deepcopy(base_params)
+            engine = BacktestEngine(
+                strategy=sid,
+                capital=params.get('capital', 1_000_000),
+                risk_per_trade=params.get('risk_per_trade', 0.02),
+                atr_sl=params.get('atr_sl', 1.0),
+                atr_tp=params.get('atr_tp', 2.0),
+                min_hits=params.get('min_hits', 5),
+                max_hold=params.get('max_hold', 20),
+                commission=params.get('commission', 0.0005),
+                entry_type=params.get('entry_type', 0),
+                atr_period=params.get('atr_period', 14),
+                _precomputed_atr=_precomputed_atr,
+            )
+            try:
+                trades, metrics = engine.run(stock_data)
+            except Exception as e:
+                logger.exception('SmartScanner: %s/%s engine.run failed: %s', ticker, sid, e)
+                metrics = {}
+                trades = []
+            score = calc_composite(metrics, min_trades)
+            signal = _calc_signal(trades, stock_data, params,
+                                  _precomputed_atr_series=_precomputed_atr,
+                                  _precomputed_df=_precomputed_df)
+            results[sid] = {
+                'metrics': metrics,
+                'trades': trades,
+                'signal': signal,
+                'score': score,
+            }
+        return results
+    except Exception:
+        tb = traceback.format_exc()
+        return {'__error__': f'{ticker}: {tb}'}
 
 
 class SmartScanner:
@@ -190,6 +195,9 @@ class SmartScanner:
                     strategies_result = f.result()
                 except Exception as e:
                     logging.exception(f'SmartScanner: {t} worker failed: {e}')
+                    strategies_result = {}
+                if '__error__' in strategies_result:
+                    logging.error(f'SmartScanner: {t} worker error:\n{strategies_result["__error__"]}')
                     strategies_result = {}
 
                 total_processed_tickers += 1

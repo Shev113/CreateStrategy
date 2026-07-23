@@ -12,6 +12,36 @@ from datetime import datetime, timedelta
 
 multiprocessing.freeze_support()
 
+import faulthandler
+faulthandler.enable()
+
+CRASH_LOG = os.path.join(
+    os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.getcwd(),
+    'crash.log',
+)
+
+def _global_excepthook(exc_type, exc_value, exc_tb):
+    try:
+        with open(CRASH_LOG, 'a', encoding='utf-8') as f:
+            f.write(f'[{datetime.now()}] UNHANDLED EXCEPTION\n')
+            traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+            f.write('\n')
+    except Exception:
+        pass
+    sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+def _thread_excepthook(args):
+    try:
+        with open(CRASH_LOG, 'a', encoding='utf-8') as f:
+            f.write(f'[{datetime.now()}] THREAD EXCEPTION\n')
+            traceback.print_exception(args.exc_type, args.exc_value, args.exc_tb, file=f)
+            f.write('\n')
+    except Exception:
+        pass
+
+sys.excepthook = _global_excepthook
+threading.excepthook = _thread_excepthook
+
 import pandas as pd
 import requests
 import urllib3
@@ -1785,6 +1815,14 @@ class CreateStrategyApp:
                     report += f"\n  Фундаментальный фильтр применён"
                 self.root.after(0, lambda: self.scanner_ui.show_report(report))
             except Exception as e:
+                try:
+                    with open(CRASH_LOG, 'a', encoding='utf-8') as f:
+                        f.write(f'[{datetime.now()}] Scanner.run_scan failed\n')
+                        traceback.print_exc(file=f)
+                        f.write('\n')
+                except Exception:
+                    pass
+                logging.error('Scanner.run_scan failed: %s', traceback.format_exc())
                 self.root.after(0, lambda: self.scanner_ui.show_report(f"Ошибка: {str(e)}"))
             finally:
                 self.root.after(0, lambda: self.scanner_ui.set_running(False))
@@ -1884,6 +1922,14 @@ class CreateStrategyApp:
                         self.signal_storage.get_strategies()))
                     self.root.after(0, self._update_top_signals)
             except Exception as e:
+                try:
+                    with open(CRASH_LOG, 'a', encoding='utf-8') as f:
+                        f.write(f'[{datetime.now()}] SmartScanner.run_scan failed\n')
+                        traceback.print_exc(file=f)
+                        f.write('\n')
+                except Exception:
+                    pass
+                logging.error('SmartScanner.run_scan failed: %s', traceback.format_exc())
                 self.root.after(0, lambda: self.smart_scanner_ui.status_var.set(f"Ошибка: {str(e)}"))
             finally:
                 self.root.after(0, lambda: self.smart_scanner_ui.set_running(False))
