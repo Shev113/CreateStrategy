@@ -4,12 +4,14 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+from news.provider import load_ai_config, save_ai_config
 from utils import app_dir
 
 
 class SettingsDialog:
     def __init__(self, root, scheduler=None, on_start_all=None, on_stop_all=None,
-                 watchlist_ui_class=None, watchlist_callbacks=None, main_app=None):
+                 watchlist_ui_class=None, watchlist_callbacks=None, main_app=None,
+                 on_ai_config_saved=None):
         self.root = root
         self.scheduler = scheduler
         self.on_start_all = on_start_all
@@ -17,7 +19,9 @@ class SettingsDialog:
         self.watchlist_ui_class = watchlist_ui_class
         self.watchlist_callbacks = watchlist_callbacks or {}
         self.main_app = main_app
+        self._on_ai_config_saved = on_ai_config_saved
         self._dialog = None
+        self._nb = None
         self._strat_name_map = None
         self._strat_id_map = None
 
@@ -29,8 +33,13 @@ class SettingsDialog:
         self._strat_name_map = {sid: name for sid, name in names}
         self._strat_id_map = {name: sid for sid, name in names}
 
-    def show(self):
+    def show(self, select_tab=None):
         if self._dialog and self._dialog.winfo_exists():
+            if select_tab:
+                for child in self._nb.tabs():
+                    if self._nb.tab(child, 'text') == select_tab:
+                        self._nb.select(child)
+                        break
             self._dialog.lift()
             self._dialog.focus_force()
             return
@@ -48,24 +57,33 @@ class SettingsDialog:
         except Exception:
             pass
 
-        nb = ttk.Notebook(self._dialog)
-        nb.pack(fill='both', expand=True, padx=5, pady=5)
+        self._nb = ttk.Notebook(self._dialog)
+        self._nb.pack(fill='both', expand=True, padx=5, pady=5)
 
-        tab_watchlist = ttk.Frame(nb)
-        tab_auto = ttk.Frame(nb)
-        tab_cloud = ttk.Frame(nb)
-        tab_strategies = ttk.Frame(nb)
+        tab_watchlist = ttk.Frame(self._nb)
+        tab_auto = ttk.Frame(self._nb)
+        tab_cloud = ttk.Frame(self._nb)
+        tab_strategies = ttk.Frame(self._nb)
+        tab_ai_news = ttk.Frame(self._nb)
 
-        nb.add(tab_watchlist, text='Избранное')
-        nb.add(tab_auto, text='Автоматизация')
-        nb.add(tab_cloud, text='Облако')
-        nb.add(tab_strategies, text='Стратегии')
+        self._nb.add(tab_watchlist, text='Избранное')
+        self._nb.add(tab_auto, text='Автоматизация')
+        self._nb.add(tab_cloud, text='Облако')
+        self._nb.add(tab_strategies, text='Стратегии')
+        self._nb.add(tab_ai_news, text='AI Новости')
 
         self._scrollable_tabs = []
         self._build_watchlist(self._make_scrollable(tab_watchlist))
         self._build_automation(self._make_scrollable(tab_auto))
         self._build_cloud(self._make_scrollable(tab_cloud))
         self._build_strategies(self._make_scrollable(tab_strategies))
+        self._build_ai_news(self._make_scrollable(tab_ai_news))
+
+        if select_tab:
+            for child in self._nb.tabs():
+                if self._nb.tab(child, 'text') == select_tab:
+                    self._nb.select(child)
+                    break
 
         btn_frame = ttk.Frame(self._dialog)
         btn_frame.pack(fill='x', padx=5, pady=(0, 5))
@@ -141,6 +159,99 @@ class SettingsDialog:
     def _build_cloud(self, parent):
         from cloud.ui import CloudPanel
         CloudPanel(parent, self.root)
+
+    def _build_ai_news(self, parent):
+        config = load_ai_config()
+        status_var = tk.StringVar()
+
+        main = ttk.Frame(parent, padding=15)
+        main.pack(fill='both', expand=True)
+
+        row = 0
+        ttk.Label(main, text='Провайдер:', font=('Segoe UI', 10)).grid(
+            row=row, column=0, sticky='e', pady=4)
+        provider_var = tk.StringVar(value=config.get('provider', 'rules'))
+        provider_cb = ttk.Combobox(main, textvariable=provider_var,
+                                    values=['github_models', 'groq', 'rules'],
+                                    width=25, state='readonly')
+        provider_cb.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+
+        row += 1
+        ttk.Label(main, text='API ключ:', font=('Segoe UI', 10)).grid(
+            row=row, column=0, sticky='e', pady=4)
+        key_var = tk.StringVar(value=config.get('api_key', ''))
+        key_entry = ttk.Entry(main, textvariable=key_var, width=40, show='*')
+        key_entry.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+
+        row += 1
+        ttk.Label(main, text='Модель:', font=('Segoe UI', 10)).grid(
+            row=row, column=0, sticky='e', pady=4)
+        model_var = tk.StringVar(value=config.get('model', 'deepseek-large-fast'))
+        model_entry = ttk.Entry(main, textvariable=model_var, width=40)
+        model_entry.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+
+        row += 1
+        ttk.Label(main, text='Эндпоинт:', font=('Segoe UI', 10)).grid(
+            row=row, column=0, sticky='e', pady=4)
+        endpoint_var = tk.StringVar(value=config.get('endpoint', 'https://models.github.ai/inference'))
+        endpoint_entry = ttk.Entry(main, textvariable=endpoint_var, width=50)
+        endpoint_entry.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+
+        row += 1
+        ttk.Separator(main, orient='horizontal').grid(
+            row=row, column=0, columnspan=2, sticky='ew', pady=8)
+
+        row += 1
+        ttk.Label(main, text='Интервал скана (мин):', font=('Segoe UI', 10)).grid(
+            row=row, column=0, sticky='e', pady=4)
+        interval_var = tk.StringVar(value=str(config.get('auto_scan_interval_min', 15)))
+        interval_entry = ttk.Entry(main, textvariable=interval_var, width=10)
+        interval_entry.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+
+        row += 1
+        ttk.Label(main, text='Макс. новостей:', font=('Segoe UI', 10)).grid(
+            row=row, column=0, sticky='e', pady=4)
+        max_var = tk.StringVar(value=str(config.get('max_news', 50)))
+        max_entry = ttk.Entry(main, textvariable=max_var, width=10)
+        max_entry.grid(row=row, column=1, sticky='w', pady=4, padx=10)
+
+        def save():
+            try:
+                cfg = {
+                    'provider': provider_var.get(),
+                    'api_key': key_var.get(),
+                    'model': model_var.get(),
+                    'endpoint': endpoint_var.get(),
+                    'auto_scan_interval_min': int(interval_var.get()),
+                    'max_news': int(max_var.get()),
+                }
+                save_ai_config(cfg)
+                status_var.set('Сохранено!')
+                if self._on_ai_config_saved:
+                    self._on_ai_config_saved()
+            except Exception as e:
+                status_var.set(f'Ошибка: {e}')
+
+        row += 1
+        btn_frame = ttk.Frame(main)
+        btn_frame.grid(row=row, column=0, columnspan=2, pady=(12, 0))
+        ttk.Button(btn_frame, text='Сохранить', command=save).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text='По умолчанию',
+                   command=lambda: [provider_var.set('github_models'),
+                                    key_var.set(''),
+                                    model_var.set('deepseek-large-fast'),
+                                    endpoint_var.set('https://models.github.ai/inference'),
+                                    interval_var.set('15'),
+                                    max_var.set('50'),
+                                    status_var.set('')]).pack(side='left', padx=5)
+
+        row += 1
+        ttk.Label(main, textvariable=status_var, foreground='green',
+                  font=('Segoe UI', 10)).grid(
+            row=row, column=0, columnspan=2, pady=(8, 0))
+
+        main.columnconfigure(0, weight=0)
+        main.columnconfigure(1, weight=1)
 
     def _build_strategies(self, parent):
         main = ttk.Frame(parent, padding=10)

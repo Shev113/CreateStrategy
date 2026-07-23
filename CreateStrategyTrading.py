@@ -577,6 +577,7 @@ class CreateStrategyApp:
             watchlist_ui_class=self._watchlist_ui_class,
             watchlist_callbacks=self._watchlist_callbacks,
             main_app=self,
+            on_ai_config_saved=self.news_analyzer._rebuild_provider,
         )
 
         from intraday.strategies import SOLABUTO_REGISTRY
@@ -2929,10 +2930,7 @@ class CreateStrategyApp:
         threading.Thread(target=run, daemon=True).start()
 
     def _on_news_settings(self):
-        old = self.news_ui._on_settings
-        self.news_ui._on_settings = None
-        self.news_ui._show_settings(on_saved=self.news_analyzer._rebuild_provider)
-        self.news_ui._on_settings = old
+        self.settings_dialog.show(select_tab='AI Новости')
 
     def _auto_news_callback(self):
         from news.provider import load_ai_config

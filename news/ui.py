@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, List, Optional, Dict
 
-from news.provider import load_ai_config, save_ai_config
 from utils import tree_batch_insert
 
 
@@ -42,7 +41,7 @@ class NewsUI:
 
         ttk.Button(ctrl, text='Обновить', command=self._refresh).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text='Анализировать все', command=self._analyze_all).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ctrl, text='Настройки AI', command=self._show_settings).pack(side=tk.LEFT, padx=(15, 2))
+        ttk.Button(ctrl, text='Настройки AI', command=self._open_settings).pack(side=tk.LEFT, padx=(15, 2))
 
         ttk.Label(ctrl, text='Фильтр:').pack(side=tk.LEFT, padx=(15, 2))
         self.sentiment_var = tk.StringVar(value='Все')
@@ -103,87 +102,9 @@ class NewsUI:
         if self._on_analyze:
             self._on_analyze()
 
-    def _show_settings(self, on_saved=None):
+    def _open_settings(self):
         if self._on_settings:
             self._on_settings()
-            return
-
-        config = load_ai_config()
-
-        win = tk.Toplevel(self.parent.winfo_toplevel())
-        win.title('Настройки AI')
-        win.geometry('450x300')
-        win.resizable(False, False)
-        win.grab_set()
-
-        frame = ttk.Frame(win, padding=15)
-        frame.pack(fill=tk.BOTH, expand=1)
-
-        row = 0
-        ttk.Label(frame, text='Провайдер:').grid(row=row, column=0, sticky='e', pady=3)
-        provider_var = tk.StringVar(value=config.get('provider', 'rules'))
-        provider_cb = ttk.Combobox(frame, textvariable=provider_var,
-                                    values=['github_models', 'groq', 'rules'],
-                                    width=20, state='readonly')
-        provider_cb.grid(row=row, column=1, sticky='w', pady=3, padx=5)
-
-        row += 1
-        ttk.Label(frame, text='API ключ:').grid(row=row, column=0, sticky='e', pady=3)
-        key_var = tk.StringVar(value=config.get('api_key', ''))
-        key_entry = ttk.Entry(frame, textvariable=key_var, width=30, show='*')
-        key_entry.grid(row=row, column=1, sticky='w', pady=3, padx=5)
-
-        row += 1
-        ttk.Label(frame, text='Модель:').grid(row=row, column=0, sticky='e', pady=3)
-        model_var = tk.StringVar(value=config.get('model', 'llama-3.3-70b-versatile'))
-        model_entry = ttk.Entry(frame, textvariable=model_var, width=30)
-        model_entry.grid(row=row, column=1, sticky='w', pady=3, padx=5)
-
-        row += 1
-        ttk.Label(frame, text='Эндпоинт:').grid(row=row, column=0, sticky='e', pady=3)
-        endpoint_var = tk.StringVar(value=config.get('endpoint', 'https://api.groq.com/openai/v1'))
-        endpoint_entry = ttk.Entry(frame, textvariable=endpoint_var, width=30)
-        endpoint_entry.grid(row=row, column=1, sticky='w', pady=3, padx=5)
-
-        row += 1
-        ttk.Label(frame, text='Интервал скана (мин):').grid(row=row, column=0, sticky='e', pady=3)
-        interval_var = tk.StringVar(value=str(config.get('auto_scan_interval_min', 15)))
-        interval_entry = ttk.Entry(frame, textvariable=interval_var, width=10)
-        interval_entry.grid(row=row, column=1, sticky='w', pady=3, padx=5)
-
-        row += 1
-        ttk.Label(frame, text='Макс. новостей:').grid(row=row, column=0, sticky='e', pady=3)
-        max_var = tk.StringVar(value=str(config.get('max_news', 50)))
-        max_entry = ttk.Entry(frame, textvariable=max_var, width=10)
-        max_entry.grid(row=row, column=1, sticky='w', pady=3, padx=5)
-
-        row += 1
-        info_label = ttk.Label(frame, text='', foreground='green')
-        info_label.grid(row=row, column=0, columnspan=2, pady=5)
-
-        def save():
-            try:
-                cfg = {
-                    'provider': provider_var.get(),
-                    'api_key': key_var.get(),
-                    'model': model_var.get(),
-                    'endpoint': endpoint_var.get(),
-                    'auto_scan_interval_min': int(interval_var.get()),
-                    'max_news': int(max_var.get()),
-                }
-                save_ai_config(cfg)
-                info_label.configure(text='Сохранено!', foreground='green')
-                if on_saved:
-                    on_saved()
-                win.after(1500, win.destroy)
-            except Exception as e:
-                info_label.configure(text=f'Ошибка: {e}', foreground='red')
-
-        row += 1
-        btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=row, column=0, columnspan=2, pady=10)
-        ttk.Button(btn_frame, text='Сохранить', command=save).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text='Отмена', command=win.destroy).pack(side=tk.LEFT, padx=5)
 
     def update_news(self, results: List[Dict]):
         self._last_results = results
