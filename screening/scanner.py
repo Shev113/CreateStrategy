@@ -166,6 +166,7 @@ class Scanner:
             entry = self._backtest_ticker(ticker, data_map[ticker], backtest_params, ticker_settings_path)
             if entry is not None:
                 entry['sector'] = ticker_to_sector[ticker]
+                entry['listing_level'] = self.sector_db.get_listing_level(ticker)
                 self.results.append(entry)
 
             processed += 1

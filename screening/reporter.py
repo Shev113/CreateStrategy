@@ -175,8 +175,12 @@ def generate_report(all_results, top_n=5, params=None):
                 if sl_dist > 0:
                     vol_text = f" {risk_amount / sl_dist:,.0f}₽"
 
+            listing_tag = ''
+            lvl = r.get('listing_level')
+            if lvl is None or lvl == 0:
+                listing_tag = ' ⚠ВнеКС'
             lines.append(
-                f"  {r['ticker']:<6s} {direction:<30s} {stars:>7s}  "
+                f"  {r['ticker']:<6s}{listing_tag} {direction:<30s} {stars:>7s}  "
                 f"Ret:{ret_s:>7s}  WR:{wr_s:>4s}  PF:{pf_s:>4s}  "
                 f"({nt:>2d} сд.){vol_text}{sl_tp}"
             )

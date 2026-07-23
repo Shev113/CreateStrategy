@@ -1246,7 +1246,7 @@ class SmartScannerUI:
         'signal_action': 'Сигнал',
     }
     WIDTHS = {
-        'rank': 35, 'ticker': 70, 'sector': 170,
+        'rank': 35,         'ticker': 120, 'sector': 170,
         'best_strategy': 140,
         'total_return': 90,
         'sharpe': 70,
@@ -1520,7 +1520,11 @@ class SmartScannerUI:
             sh_str = f"{sh:.2f}" if isinstance(sh, (int, float)) else "—"
             trades_str = str(trades) if trades else "—"
 
-            values = (rank, r['ticker'], r['sector'], best_name, ret_str, sh_str, trades_str, action_short)
+            ticker_text = r['ticker']
+            lvl = r.get('listing_level')
+            if lvl is None or lvl == 0:
+                ticker_text += ' ⚠ВнеКС'
+            values = (rank, ticker_text, r['sector'], best_name, ret_str, sh_str, trades_str, action_short)
             tags = ()
             if isinstance(ret, (int, float)):
                 tags = ('positive',) if ret > 0 else ('negative',)

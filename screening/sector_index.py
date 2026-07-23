@@ -42,6 +42,23 @@ def fetch_all_moex_tickers():
     return result
 
 
+def fetch_listing_levels():
+    """Return dict[ticker -> LISTLEVEL (int or None)] from MOEX."""
+    response = MOEX_SESSION.get(ALL_TICKERS_URL, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    columns = data['securities']['columns']
+    try:
+        level_idx = columns.index('LISTLEVEL')
+    except ValueError:
+        return {}
+    return {
+        row[0]: row[level_idx]
+        for row in data['securities']['data']
+        if row and len(row) > level_idx
+    }
+
+
 def fetch_index_tickers(index_id):
     url = ANALYTICS_URL.format(index_id=index_id)
     response = MOEX_SESSION.get(url, timeout=15)

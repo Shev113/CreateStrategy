@@ -215,6 +215,7 @@ class SmartScanner:
                 entry = {
                     'ticker': t,
                     'sector': sector,
+                    'listing_level': self.sector_db.get_listing_level(t),
                     'strategies': strategies_result,
                     'best_strategy': best_strategy_id,
                     'best_score': best_score,
