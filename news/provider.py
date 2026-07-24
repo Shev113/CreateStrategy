@@ -40,15 +40,30 @@ GROQ_MODELS = [
     'deepseek-r1-distill-llama-70b',
 ]
 
+OPENROUTER_MODELS = [
+    'deepseek/deepseek-chat',
+    'openai/gpt-4o',
+    'openai/gpt-4o-mini',
+    'anthropic/claude-3.5-sonnet',
+    'google/gemini-2.0-flash-001',
+    'mistralai/mistral-small-24b-instruct',
+    'qwen/qwen-2.5-7b-instruct',
+    'meta-llama/llama-3.1-8b-instruct',
+    'nousresearch/hermes-3-llama-3.1-70b',
+    'cohere/command-r-plus',
+]
+
 PROVIDER_MODELS = {
     'github_models': GITHUB_MODELS,
     'groq': GROQ_MODELS,
+    'openrouter': OPENROUTER_MODELS,
     'rules': [],
 }
 
 DEFAULT_MODELS = {
     'github_models': 'deepseek-large-fast',
     'groq': 'llama-3.3-70b-versatile',
+    'openrouter': 'deepseek/deepseek-chat',
     'rules': '',
 }
 
@@ -79,6 +94,21 @@ def fetch_available_models(provider: str, api_key: str, endpoint: str) -> List[s
         return combined if combined else PROVIDER_MODELS.get(provider, [])
     except Exception:
         return list(PROVIDER_MODELS.get(provider, []))
+
+
+def _read_opencode_openrouter_key() -> str:
+    """Try to read OpenRouter API key from opencode auth.json."""
+    try:
+        auth_path = os.path.join(os.path.expanduser('~'), '.local', 'share', 'opencode', 'auth.json')
+        if os.path.exists(auth_path):
+            with open(auth_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            key = data.get('openrouter', {}).get('key', '')
+            if key:
+                return key
+    except Exception:
+        pass
+    return ''
 
 
 def _read_github_key() -> str:
@@ -279,6 +309,61 @@ class GitHubModelsProvider(AIProvider):
             raise
 
 
+class OpenRouterProvider(AIProvider):
+    SYSTEM_PROMPT = """Ты — аналитик российского фондового рынка. Проанализируй финансовую новость.
+Ответь ТОЛЬКО в формате JSON (без markdown, без ```):
+{
+  "sentiment": "positive" | "neutral" | "negative",
+  "score": -1.0 .. 1.0,
+  "impact": 1..5,
+  "tickers": ["TICKER1", "TICKER2"],
+  "summary": "Краткое резюме 1-2 предложения",
+  "recommendation": "наблюдать" | "действовать" | "игнорировать"
+}"""
+
+    def __init__(self, api_key: str, model: str = 'deepseek/deepseek-chat',
+                 endpoint: str = 'https://openrouter.ai/api/v1'):
+        self._api_key = api_key
+        self._model = model
+        self._endpoint = endpoint.rstrip('/')
+
+    def analyze(self, title: str, text: str) -> Dict:
+        import requests as req
+        url = f'{self._endpoint}/chat/completions'
+        headers = {
+            'Authorization': f'Bearer {self._api_key}',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://github.com/CreateStrategyTrading',
+            'X-Title': 'CreateStrategyTrading',
+        }
+        user_msg = f'Заголовок: {title}\n\nТекст: {text[:2000]}'
+        payload = {
+            'model': self._model,
+            'messages': [
+                {'role': 'system', 'content': self.SYSTEM_PROMPT},
+                {'role': 'user', 'content': user_msg},
+            ],
+            'temperature': 0.1,
+            'max_tokens': 500,
+        }
+        try:
+            resp = req.post(url, json=payload, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            content = data['choices'][0]['message']['content'].strip()
+            content = content.strip('`').strip()
+            if content.startswith('json'):
+                content = content[4:].strip()
+            result = json.loads(content)
+            for key in ('sentiment', 'score', 'impact', 'tickers', 'summary', 'recommendation'):
+                result.setdefault(key, '' if key in ('summary', 'recommendation') else
+                                       [] if key == 'tickers' else 0)
+            return result
+        except Exception as e:
+            logging.warning(f'OpenRouter API error: {e}')
+            raise
+
+
 def load_ai_config() -> Dict:
     if os.path.exists(AI_CONFIG_PATH):
         try:
@@ -325,6 +410,17 @@ def create_provider(config: Dict = None, known_tickers=None) -> AIProvider:
             api_key=api_key,
             model=cfg.get('model', 'llama-3.3-70b-versatile'),
             endpoint=cfg.get('endpoint', 'https://api.groq.com/openai/v1'),
+        )
+
+    if provider_name == 'openrouter':
+        api_key = cfg.get('api_key') or _read_opencode_openrouter_key()
+        if not api_key:
+            logging.warning('OpenRouter: API key not found. Using rule-based fallback.')
+            return RuleBasedProvider(known_tickers=known_tickers)
+        return OpenRouterProvider(
+            api_key=api_key,
+            model=cfg.get('model', 'deepseek/deepseek-chat'),
+            endpoint=cfg.get('endpoint', 'https://openrouter.ai/api/v1'),
         )
 
     return RuleBasedProvider(known_tickers=known_tickers)

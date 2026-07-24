@@ -4,7 +4,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from news.provider import load_ai_config, save_ai_config, fetch_available_models, PROVIDER_MODELS, DEFAULT_MODELS
+from news.provider import load_ai_config, save_ai_config, fetch_available_models, PROVIDER_MODELS, DEFAULT_MODELS, _read_opencode_openrouter_key
 from utils import app_dir
 
 
@@ -172,8 +172,13 @@ class SettingsDialog:
             endpoint_var.set({
                 'github_models': 'https://models.github.ai/inference',
                 'groq': 'https://api.groq.com/openai/v1',
+                'openrouter': 'https://openrouter.ai/api/v1',
                 'rules': '',
             }.get(prov, endpoint_var.get()))
+            if prov == 'openrouter':
+                odk = _read_opencode_openrouter_key()
+                if odk and not key_var.get():
+                    key_var.set(odk)
             if prov == 'rules':
                 model_cb.configure(values=[])
                 model_var.set('')
@@ -212,7 +217,7 @@ class SettingsDialog:
             row=row, column=0, sticky='e', pady=4)
         provider_var = tk.StringVar(value=config.get('provider', 'rules'))
         provider_cb = ttk.Combobox(main, textvariable=provider_var,
-                                    values=['github_models', 'groq', 'rules'],
+                                    values=['github_models', 'groq', 'openrouter', 'rules'],
                                     width=25, state='readonly')
         provider_cb.grid(row=row, column=1, sticky='w', pady=4, padx=10)
         provider_cb.bind('<<ComboboxSelected>>', refresh_models)
