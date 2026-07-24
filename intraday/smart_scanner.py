@@ -114,8 +114,9 @@ def _build_h1_signal(trades, data):
 
 
 class IntradaySmartScanner:
-    def __init__(self):
+    def __init__(self, listing_levels=None):
         self.results = []
+        self._listing_levels = listing_levels or {}
 
     def scan(self, tickers, date_from, date_to, base_params,
              min_trades=10, progress_fn=None):
@@ -203,6 +204,7 @@ class IntradaySmartScanner:
                 'strategies': strategies_result,
                 'best_strategy': best_strategy_id,
                 'best_score': best_score,
+                'listing_level': self._listing_levels.get(ticker.upper()),
             }
             if best_strategy_id and best_strategy_id in strategies_result:
                 s = strategies_result[best_strategy_id]

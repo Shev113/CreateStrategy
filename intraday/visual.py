@@ -549,9 +549,10 @@ class IntradayUI:
 
 
 class IntradaySmartScannerUI:
-    COLUMNS = ('rank', 'ticker', 'best_strategy', 'total_return', 'sharpe', 'trades', 'signal_action')
+    COLUMNS = ('rank', 'ticker', 'listing', 'best_strategy', 'total_return', 'sharpe', 'trades', 'signal_action')
     HEADERS = {
         'rank': '№', 'ticker': 'Тикер',
+        'listing': 'Листинг',
         'best_strategy': 'Лучшая стратегия',
         'total_return': 'Доходность',
         'sharpe': 'Sharpe',
@@ -560,6 +561,7 @@ class IntradaySmartScannerUI:
     }
     WIDTHS = {
         'rank': 35, 'ticker': 80,
+        'listing': 70,
         'best_strategy': 150,
         'total_return': 90,
         'sharpe': 70,
@@ -777,7 +779,19 @@ class IntradaySmartScannerUI:
             sh_str = f'{sh:.2f}' if isinstance(sh, (int, float)) else '—'
             trades_str = str(trades) if trades else '—'
 
-            values = (rank, r['ticker'], best_name, ret_str, sh_str, trades_str, action_short)
+            lvl = r.get('listing_level')
+            if lvl == 1:
+                listing_display = 'Ⅰ'
+            elif lvl == 2:
+                listing_display = 'Ⅱ'
+            elif lvl == 3:
+                listing_display = 'Ⅲ'
+            elif lvl == 0:
+                listing_display = '⚠ВнеКС'
+            else:
+                listing_display = '—'
+
+            values = (rank, r['ticker'], listing_display, best_name, ret_str, sh_str, trades_str, action_short)
             tags = ()
             if isinstance(ret, (int, float)):
                 tags = ('positive',) if ret > 0 else ('negative',)

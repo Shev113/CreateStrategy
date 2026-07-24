@@ -640,7 +640,7 @@ class CreateStrategyApp:
         self._last_intra_smart_params = params
         def run():
             try:
-                scanner = IntradaySmartScanner()
+                scanner = IntradaySmartScanner(listing_levels=self.sector_db._listing_levels)
                 results = scanner.scan(
                     tickers=tickers,
                     date_from=date_from,
